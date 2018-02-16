@@ -43,14 +43,13 @@ class IRClient:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect(('localhost', 50505))
-            s.sendall(IR_REQ_TR)
+            s.sendall(IR_REQ_CL)
         except Exception as e:
             print("Socket init error")
             print(e)
             s.close()
             return
 
-        prediction = "Failed"
         try:
             if IR_READY in s.recv(1024):
                 # send image
@@ -69,6 +68,7 @@ class IRClient:
         try:
             prediction = s.recv(1024)
         except Exception as e:
+            prediction = "Failed"
             print("Prediction failed.")
             print(e)
 
@@ -84,6 +84,7 @@ if __name__ == "__main__":
     testRes = test.classify_req(cwd + "/test.jpg")
     end = datetime.now()
 
-    print("found " + testRes)
-    print("in (hh:mm:ss.ms) {}".format(end-start))
+    if testRes is not None:
+        print("found " + testRes)
+        print("in (hh:mm:ss.ms) {}".format(end-start))
 

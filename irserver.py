@@ -119,9 +119,11 @@ def train_thread(conn, filepath):
         f.close()
         conn.close()
         return
+
     conn.close()
 
 # pass an image to a classifier
+# implementation will differ
 def relay_classify_req(filepath):
     # direct this to any classifier
     try:
