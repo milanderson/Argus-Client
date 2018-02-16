@@ -13,41 +13,65 @@ class IRClient:
         self.init = 1
 
     def train_req(self, imgpath):
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect(('localhost', 50505))
-        s.sendall(IR_REQ_TR)
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect(('localhost', 50505))
+            s.sendall(IR_REQ_TR)
+        except Exception as e:
+            print("Socket init error")
+            print(e)
+            s.close()
+            return
 
-        if IR_READY in s.recv(1024):
-
-            # send image
-            f = open(imgpath)
-            while True:
-                data = f.read(1024)
-                if data == '':
-                    break
-                s.sendall(data)
-            s.sendall("Done")
+        try:
+            if IR_READY in s.recv(1024):
+                # send image
+                f = open(imgpath)
+                while True:
+                    data = f.read(1024)
+                    if data == '':
+                        break
+                    s.sendall(data)
+                s.sendall("Done")
+        except Exception as e:
+            print("Image failed to send.")
+            print(e)
 
         s.close()
 
     def classify_req(self, imgpath):
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect(('localhost', 50505))
-        s.sendall(IR_REQ_CL)
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect(('localhost', 50505))
+            s.sendall(IR_REQ_TR)
+        except Exception as e:
+            print("Socket init error")
+            print(e)
+            s.close()
+            return
 
         prediction = "Failed"
-        if IR_READY in s.recv(1024):
+        try:
+            if IR_READY in s.recv(1024):
+                # send image
+                f = open(imgpath)
+                while True:
+                    data = f.read(1024)
+                    if data == '':
+                        break
+                    s.sendall(data)
+                s.sendall("Done")
 
-            # send image
-            f = open(imgpath)
-            while True:
-                data = f.read(1024)
-                if data == '':
-                    break
-                s.sendall(data)
-            s.sendall("Done")
+        except Exception as e:
+            print("Image failed to send.")
+            print(e)
 
+        try:
             prediction = s.recv(1024)
+        except Exception as e:
+            print("Prediction failed.")
+            print(e)
+
         s.close()
 
         return prediction

@@ -22,7 +22,11 @@ class IRDispatcher(Daemon):
         folderPath = "/" + str(now.year) + "_" + str(now.month) + "_" + str(now.day)
 
         if not os.path.isdir(folderPath):
-            os.makedirs(folderPath, mode=0777)
+            try:
+                os.makedirs(folderPath, mode=0777)
+            except Exception as e:
+                print(e)
+                exit()
 
             self.fileID = 0
 
@@ -35,13 +39,23 @@ class IRDispatcher(Daemon):
         HOST = ''
         PORT = 50505
 
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.bind(('localhost', 50505))
-        s.listen(3)
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.bind(('localhost', 50505))
+            s.listen(3)
+        except Exception as e:
+            print("Socket failed to init.")
+            print(e)
+            exit()
 
         while True:
-            conn, addr = s.accept()
-            data = conn.recv(1024)
+            try:
+                conn, addr = s.accept()
+                data = conn.recv(1024)
+            except Exception as e:
+                print("Accept and connect failure.")
+                print(e)
+                continue
 
             if IR_REQ_TR in data:
                 path = self.next_filename()
@@ -52,42 +66,71 @@ class IRDispatcher(Daemon):
                 t = threading.Thread(target=classify_thread, args=(conn, path))
                 t.start()
             else:
-                conn.sendall(REFUSE_IR_REQ)
-                conn.close()
+                try:
+                    conn.sendall(REFUSE_IR_REQ)
+                    conn.close()
+                except Exception as e:
+                    print("Refusing connection.")
+                    print(e)
+                    continue
 
 # recieve and process an image training request
 def classify_thread(conn, filepath):
     f = open(filepath, 'w+')
 
-    conn.sendall(IR_READY)
-    while True:
-        data = conn.recv(1024)
-        if not data or "Done" in data:
-            break
-        f.write(data)
-    f.close()
+    # save incoming image file
+    try:
+        conn.sendall(IR_READY)
+        while True:
+            data = conn.recv(1024)
+            if not data or "Done" in data:
+                break
+            f.write(data)
+        f.close()
+    except Exception as e:
+        print("Error recieving image.")
+        print(e)
+        f.close()
+        conn.close()
+        return
 
-    prediction = relay_train_req(filepath)
-    conn.sendall(prediction)
+    # pass image to classifier
+    prediction = relay_classify_req(filepath)
+    if prediction is not None:
+        conn.sendall(prediction)
 
     conn.close()
-
 
 # recieve and process an image classification request
 def train_thread(conn, filepath):
     f = open(filepath, 'w+')
 
-    conn.sendall(IR_READY)
-    while True:
-        data = conn.recv(1024)
-        if not data or "Done" in data:
-            break
-        f.write(data)
+    # save incoming image file
+    try:
+        conn.sendall(IR_READY)
+        while True:
+            data = conn.recv(1024)
+            if not data or "Done" in data:
+                break
+            f.write(data)
+        f.close()
+    except Exception as e:
+        print("Error recieving image.")
+        f.close()
+        conn.close()
+        return
     conn.close()
 
-def relay_train_req(filepath):
+# pass an image to a classifier
+def relay_classify_req(filepath):
     # direct this to any classifier
-    printout = os.popen("python /home/student/Desktop/tutorial-2-image-classifier/predict.py " + filepath).read()
+    try:
+        printout = os.popen("python /home/student/Desktop/tutorial-2-image-classifier/predict.py " + filepath).read()
+    except Exception as e:
+        print("Classifier error.")
+        print(e)
+        return None
+
     answer = printout[printout.find("[[") + 2:len(printout) - 3].split()
 
     if float(answer[0]) > float(answer[1]):
