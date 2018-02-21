@@ -19,7 +19,7 @@ class IRDispatcher(Daemon):
 
     def next_filename(self):
         now = datetime.now()
-        folderPath = "/" + str(now.year) + "_" + str(now.month) + "_" + str(now.day)
+        folderPath = "/var/services/homes/milanderson/test/" + str(now.year) + "_" + str(now.month) + "_" + str(now.day)
 
         if not os.path.isdir(folderPath):
             try:
@@ -41,7 +41,8 @@ class IRDispatcher(Daemon):
 
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.bind(('localhost', 50505))
+            s.bind(('10.22.17.30', 50505))
+            print(s.getsockname())
             s.listen(3)
         except Exception as e:
             print("Socket failed to init.")
@@ -96,8 +97,9 @@ def classify_thread(conn, filepath):
 
     # pass image to classifier
     prediction = relay_classify_req(filepath)
-    if prediction is not None:
-        conn.sendall(prediction)
+    if prediction is None:
+        prediction = "Undefined"
+    conn.sendall(prediction)
 
     conn.close()
 
@@ -125,21 +127,8 @@ def train_thread(conn, filepath):
 # pass an image to a classifier
 # implementation will differ
 def relay_classify_req(filepath):
-    # direct this to any classifier
-    try:
-        printout = os.popen("python /home/student/Desktop/tutorial-2-image-classifier/predict.py " + filepath).read()
-    except Exception as e:
-        print("Classifier error.")
-        print(e)
-        return None
-
-    answer = printout[printout.find("[[") + 2:len(printout) - 3].split()
-
-    if float(answer[0]) > float(answer[1]):
-        prediction = "dog"
-    else:
-        prediction = "cat"
-    return prediction
+    # NULL Method
+    return None
 
 
 # init daemon

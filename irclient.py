@@ -2,10 +2,12 @@
 # requests.
 import os, sys, time, socket
 from datetime import datetime
+from time import sleep
 
 IR_REQ_TR = 'Train'
 IR_REQ_CL = 'Classify'
 IR_READY = 'Ready'
+SERVER_IP = '10.22.17.30'
 
 class IRClient:
 
@@ -15,7 +17,7 @@ class IRClient:
     def train_req(self, imgpath):
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect(('localhost', 50505))
+            s.connect((SERVER_IP, 50505))
             s.sendall(IR_REQ_TR)
         except Exception as e:
             print("Socket init error")
@@ -42,7 +44,7 @@ class IRClient:
     def classify_req(self, imgpath):
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect(('localhost', 50505))
+            s.connect((SERVER_IP, 50505))
             s.sendall(IR_REQ_CL)
         except Exception as e:
             print("Socket init error")
@@ -80,11 +82,21 @@ if __name__ == "__main__":
     test = IRClient()
     cwd = os.getcwd()
 
-    start = datetime.now()
-    testRes = test.classify_req(cwd + "/test.jpg")
-    end = datetime.now()
+    d = datetime.now()
+    totalTime = d - d
+    maxTime = d - d
+    for i in range(100):
+        start = datetime.now()
+        testRes = test.classify_req(cwd + "/test.jpg")
+        end = datetime.now()
 
-    if testRes is not None:
-        print("found " + testRes)
-        print("in (hh:mm:ss.ms) {}".format(end-start))
+        if maxTime < (end - start):
+            maxTime = (end - start)
+        totalTime += (end - start)
 
+	sleep(0.5)
+        #if testRes is not None:
+        #    print("found " + testRes)
+        #    print("in (hh:mm:ss.ms) {}".format(end-start))
+    print('average time: (hh:mm:ss:ms) {}'.format(totalTime/100))
+    print('longest time: (hh:mm:ss:ms) {}'.format(maxTime))
