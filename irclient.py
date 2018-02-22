@@ -47,6 +47,7 @@ class IRClient:
     def classify_req(self, imgpath):
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	    s.settimeout(1.5)
             s.connect((SERVER_IP, 50505))
             s.sendall(IR_REQ_CL)
         except Exception as e:
