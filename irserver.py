@@ -11,6 +11,7 @@ IR_REQ_TR = 'Train'
 IR_REQ_CL = 'Classify'
 IR_READY = "Ready"
 CURR_FILE_ID = 0
+SERVER_IP = '10.22.17.30'
 
 class IRDispatcher(Daemon):
 
@@ -41,7 +42,7 @@ class IRDispatcher(Daemon):
 
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.bind(('10.22.17.30', 50505))
+            s.bind((SERVER_IP, 50505))
             print(s.getsockname())
             s.listen(3)
         except Exception as e:
