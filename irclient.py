@@ -39,6 +39,7 @@ class IRClient:
         except Exception as e:
             print("Image failed to send.")
             print(e)
+	    return None
 
         s.close()
 
@@ -68,6 +69,7 @@ class IRClient:
         except Exception as e:
             print("Image failed to send.")
             print(e)
+	    return None
 
         try:
             prediction = s.recv(1024)
