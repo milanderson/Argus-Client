@@ -78,7 +78,7 @@ class IRDispatcher(Daemon):
 
 # recieve and process an image training request
 def classify_thread(conn, filepath):
-    f = open(filepath, 'w+')
+    f = open(filepath, 'wb+')
 
     # save incoming image file
     try:
@@ -106,7 +106,7 @@ def classify_thread(conn, filepath):
 
 # recieve and process an image classification request
 def train_thread(conn, filepath):
-    f = open(filepath, 'w+')
+    f = open(filepath, 'wb+')
 
     # save incoming image file
     try:
