@@ -28,12 +28,13 @@ class IRClient:
         try:
             if IR_READY in s.recv(1024):
                 # send image
-                f = open(imgpath)
+                f = open(imgpath, "rb")
                 while True:
                     data = f.read(1024)
                     if data == '':
                         break
                     s.sendall(data)
+		f.close()
                 s.sendall("Done")
         except Exception as e:
             print("Image failed to send.")
@@ -55,12 +56,13 @@ class IRClient:
         try:
             if IR_READY in s.recv(1024):
                 # send image
-                f = open(imgpath)
+                f = open(imgpath, "rb")
                 while True:
                     data = f.read(1024)
                     if data == '':
                         break
                     s.sendall(data)
+		f.close()
                 s.sendall("Done")
 
         except Exception as e:
