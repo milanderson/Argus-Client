@@ -12,7 +12,7 @@ IR_REQ_TR = 'Train'
 IR_REQ_CL = 'Classify'
 IR_READY = "Ready"
 CURR_FILE_ID = 0
-SERVER_IP = '172.17.0.1'
+SERVER_IP = '0.0.0.0'
 
 class IRDispatcher(Daemon):
 
