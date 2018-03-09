@@ -2,11 +2,12 @@
 # requests. Runs as a daemon, listening for incoming requests
 # and dispatching them to threads for training or classification.
 
-import os, sys, time, socket, threading
+import os, sys, time, socket, select, threading
 from datetime import datetime
 from daemon import Daemon
 
 REFUSE_IR_REQ = "Request not recognized. Valid requests are Train|Classify"
+IR_REQ_ST = 'Stream'
 IR_REQ_TR = 'Train'
 IR_REQ_CL = 'Classify'
 IR_READY = "Ready"
@@ -30,10 +31,16 @@ class IRDispatcher(Daemon):
                 exit()
 
             self.fileID = 0
+            self.AVI_ID = 0
 
-        self.fileID += 1
-        fileName = str(self.fileID).zfill(19) + ".jpg"
-        return folderPath + "/" + fileName
+        if avi is None:
+            self.fileID += 1
+            fileName = str(self.fileID).zfill(19) + ".jpg"
+            return folderPath + "/" + fileName
+        else:
+            self.AVI_ID += 1
+            fileName = str(self.AVI_ID).zfill(19) + ".avi"
+            return folderPath + "/" + fileName
 
     def init_ir_server(self):
         self.fileID = 0
@@ -67,6 +74,10 @@ class IRDispatcher(Daemon):
                 path = self.next_filename()
                 t = threading.Thread(target=classify_thread, args=(conn, path))
                 t.start()
+            elif IR_REQ_ST in data:
+                path = self.next_filename('avi')
+                t = threading.Thread(target=stream_thread, args=(conn, path))
+                t.start()
             else:
                 try:
                     conn.sendall(REFUSE_IR_REQ)
@@ -76,6 +87,47 @@ class IRDispatcher(Daemon):
                     print(e)
                     continue
 
+# recieve H264 encoded stream and save as AVI
+def stream_thread(conn, filepath):
+    f = open(filepath, 'wb+')
+    try:
+        OOBsInit = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        OOBsInit.bind((SERVER_IP, 0))
+        OOBs_info = OOBsInit.getsockname()
+        OOBsInit.listen(3)
+
+        print(OOBs_info[1])
+        conn.sendall(str(OOBs_info[1]))
+
+        OOBs, addr = OOBsInit.accept()
+        conn.sendall(IR_READY)
+    except Exception as e:
+        print("Error creating communication socket")
+        print(e)
+        exit()
+
+    readset = [conn, OOBs]
+    writeset = []
+    errset = []
+
+    # save incoming video file
+    try:
+        while True:
+            readable, writable, erronious = select.select(readset, writeset, errset)
+            if OOBs in readable:
+                msg = OOBs.recv(1024)
+                print(msg)
+                OOBs.sendall("RECIEVED")
+            if conn in readable:
+                data = conn.recv(1024)
+                f.write(data)
+    except Exception as e:
+        print("Error recieving image.")
+        print(e)
+        f.close()
+
+    conn.close()
+                    
 # recieve and process an image training request
 def classify_thread(conn, filepath):
     f = open(filepath, 'wb+')
