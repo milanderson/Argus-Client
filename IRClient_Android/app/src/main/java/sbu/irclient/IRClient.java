@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit;
 
 public class IRClient extends AppCompatActivity {
     public static String IR_REQ_ST = "Stream";
-    public static String SERVER_IP = "24.189.25.87";
+    public static String SERVER_IP = "173.79.72.37";
     public static final String TAG = "IRClient";
 
     public static File mOutputFile = null;
