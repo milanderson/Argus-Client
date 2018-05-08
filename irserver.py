@@ -5,11 +5,14 @@
 import os, sys, time, socket, select, threading
 from datetime import datetime
 from daemon import Daemon
+import numpy as np
+import cv2
 
 REFUSE_IR_REQ = "Request not recognized. Valid requests are Train|Classify"
 IR_REQ_ST = 'Stream'
 IR_REQ_TR = 'Train'
 IR_REQ_CL = 'Classify'
+IR_REQ_SS = 'Slideshow'
 IR_READY = "Ready"
 CURR_FILE_ID = 0
 SERVER_IP = '0.0.0.0'
@@ -17,11 +20,13 @@ SERVER_IP = '0.0.0.0'
 class IRDispatcher(Daemon):
 
     def run(self):
+        self.fileID = 0
+        self.AVI_ID = 0
         self.init_ir_server()
 
-    def next_filename(self):
+    def next_filename(self, avi=None):
         now = datetime.now()
-        folderPath = "/var/services/homes/milanderson/test/" + str(now.year) + "_" + str(now.month) + "_" + str(now.day)
+        folderPath = str(now.year) + "_" + str(now.month) + "_" + str(now.day)
 
         if not os.path.isdir(folderPath):
             try:
@@ -36,11 +41,11 @@ class IRDispatcher(Daemon):
         if avi is None:
             self.fileID += 1
             fileName = str(self.fileID).zfill(19) + ".jpg"
-            return folderPath + "/" + fileName
+            return folderPath + "\\" + fileName
         else:
             self.AVI_ID += 1
-            fileName = str(self.AVI_ID).zfill(19) + ".avi"
-            return folderPath + "/" + fileName
+            fileName = str(self.AVI_ID).zfill(19) + ".264"
+            return folderPath + "\\" + fileName
 
     def init_ir_server(self):
         self.fileID = 0
@@ -60,7 +65,9 @@ class IRDispatcher(Daemon):
         while True:
             try:
                 conn, addr = s.accept()
+                print("Accepted")
                 data = conn.recv(1024)
+                print(data)
             except Exception as e:
                 print("Accept and connect failure.")
                 print(e)
@@ -78,6 +85,10 @@ class IRDispatcher(Daemon):
                 path = self.next_filename('avi')
                 t = threading.Thread(target=stream_thread, args=(conn, path))
                 t.start()
+            elif IR_REQ_SS in data:
+                path = self.next_filename()
+                t = threading.Thread(target=slideshow_thread, args=(conn, path))
+                t.start()
             else:
                 try:
                     conn.sendall(REFUSE_IR_REQ)
@@ -89,16 +100,19 @@ class IRDispatcher(Daemon):
 
 # recieve H264 encoded stream and save as AVI
 def stream_thread(conn, filepath):
+    print("stream")
+    print(filepath)
     f = open(filepath, 'wb+')
+    cap = cv2.VideoCapture(filepath)
+    print(cap.isOpened)
     try:
         OOBsInit = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        OOBsInit.bind((SERVER_IP, 0))
+        OOBsInit.bind((SERVER_IP, 50506))
         OOBs_info = OOBsInit.getsockname()
         OOBsInit.listen(3)
 
         print(OOBs_info[1])
         conn.sendall(str(OOBs_info[1]))
-
         OOBs, addr = OOBsInit.accept()
         conn.sendall(IR_READY)
     except Exception as e:
@@ -111,20 +125,39 @@ def stream_thread(conn, filepath):
     errset = []
 
     # save incoming video file
+    print("reading incoming file")
+    fCount = 0
     try:
         while True:
             readable, writable, erronious = select.select(readset, writeset, errset)
             if OOBs in readable:
                 msg = OOBs.recv(1024)
                 print(msg)
-                OOBs.sendall("RECIEVED")
+                if "DONE" in msg:
+                    break
+
+                OOBs.sendall("RECEIVED")
             if conn in readable:
                 data = conn.recv(1024)
                 f.write(data)
+
+                #if fCount < 3:
+                #    fCount += 1
+                #else:
+                #    ret, frame = cap.read()
+                #    if ret:
+                #        try:
+                #            cv2.imshow('frame',frame)
+                #            if cv2.waitKey(1) & 0xFF == ord('q'):
+                #                break
+                #        except Exception as e:
+                #            fCount = fCount
+
     except Exception as e:
         print("Error recieving image.")
         print(e)
         f.close()
+        cap.release()
 
     conn.close()
                     
@@ -138,9 +171,12 @@ def classify_thread(conn, filepath):
         while True:
             data = conn.recv(1024)
             if not data or "Done" in data:
+                if len(data) > 4:
+                    f.write(data[0:len(data) - 6])
                 break
             f.write(data)
         f.close()
+        conn.sendall("RECEIVED")
     except Exception as e:
         print("Error recieving image.")
         print(e)
@@ -153,6 +189,51 @@ def classify_thread(conn, filepath):
     if prediction is None:
         prediction = "Undefined"
     conn.sendall(prediction)
+
+    conn.close()
+
+# recieve anf process a stream of YUV images
+def slideshow_thread(conn, filepath):
+    print("slideshow")
+    f = open(filepath, 'wb+')
+    fRead = open(filepath, "rb+")
+
+    try:
+        conn.sendall(IR_READY)
+        datasize = 0
+        while True:
+            data = conn.recv(1024)
+            f.write(data)
+
+            #print(data)
+
+            if datasize < 463000:
+                datasize += len(data)
+            else:
+                print("frame recieved")
+                datasize = datasize % 460800
+                w = 640
+                h = 480
+	
+                byteArray = fRead.read(460800)
+                byteArray = np.frombuffer(byteArray, dtype=np.uint8)
+                byteArray = np.reshape(byteArray, (h*3/2, w))
+
+                RGBMatrix = cv2.cvtColor(byteArray, cv2.COLOR_YUV2BGR_NV21)
+
+                cv2.imshow('frame', RGBMatrix)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+                
+                conn.sendall("RECEIVED")
+
+        f.close()
+    except Exception as e:
+        print("Error recieving image.")
+        print(e)
+        f.close()
+        conn.close()
+        return
 
     conn.close()
 
@@ -183,20 +264,19 @@ def relay_classify_req(filepath):
     # NULL Method
     return None
 
+def YUVtoRGB(filename):
+    w = 640
+    h = 480
+	
+    file = open(filename, "rb+")
+    byteArray = file.read(460800)
+    byteArray = np.frombuffer(byteArray, dtype=np.uint8)
+    byteArray = np.reshape(byteArray, (h*3/2, w))
+
+    RGBMatrix = cv2.cvtColor(byteArray, cv2.COLOR_YUV2BGR_NV21)
+    return RGBMatrix
 
 # init daemon
 if __name__ == "__main__":
     daemon = IRDispatcher('/tmp/IRDispatcher.pid')
-    if len(sys.argv) == 2:
-        if 'start' == sys.argv[1]:
-                daemon.start()
-        elif 'stop' == sys.argv[1]:
-                daemon.stop()
-        elif 'restart' == sys.argv[1]:
-                daemon.restart()
-        else:
-                print "Unknown command"
-                sys.exit(2)
-        sys.exit(0)
-    else:
-        print "usage: %s start|stop|restart" % sys.argv[0]
+    daemon.run()

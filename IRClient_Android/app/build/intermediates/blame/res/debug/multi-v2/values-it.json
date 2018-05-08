@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "C:\\Users\\Tumbleweed\\AndroidStudioProjects\\IRClient\\app\\build\\intermediates\\incremental\\mergeDebugResources\\merged.dir\\values-it\\values-it.xml",
+            "outputFile": "C:\\Users\\Tumbleweed\\Desktop\\Proj\\IR-Server\\IRClient_Android\\app\\build\\intermediates\\incremental\\mergeDebugResources\\merged.dir\\values-it\\values-it.xml",
             "map": [
                 {
                     "source": "C:\\Users\\Tumbleweed\\.gradle\\caches\\transforms-1\\files-1.1\\appcompat-v7-27.1.1.aar\\ecad0811f076c71bb4e503000d7d577b\\res\\values-it\\values-it.xml",

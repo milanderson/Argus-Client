@@ -33,7 +33,7 @@ public class IRClient_NetTask extends AsyncTask<Void, Void, Void> {
             msgOut = new DataOutputStream(msgSock.getOutputStream());
             msgIn = new DataInputStream(msgSock.getInputStream());
             //msgOut.writeUTF("Stream");
-            msgOut.writeUTF("Classify");
+            msgOut.writeUTF("Slideshow");
             msgOut.flush();
 
             msgIn.read();
@@ -70,7 +70,7 @@ public class IRClient_NetTask extends AsyncTask<Void, Void, Void> {
             return null;
         }
         */
-        while (true && ticker < 10) {
+        while (true) {
             try {
                 /*
                 buf = MP4toNALU.getNextFrame();
@@ -97,26 +97,16 @@ public class IRClient_NetTask extends AsyncTask<Void, Void, Void> {
                     long recvTime = System.currentTimeMillis();
                     Log.e(IRClient.TAG, "RTT: " + Long.toString(recvTime - sendTime.poll()));
                 }
-
-                hostMain = new InetSocketAddress(IRClient.SERVER_IP, 50505);
-                msgSock = new Socket(hostMain.getAddress(), hostMain.getPort());
-                msgSock.setSoTimeout(1500);
-                msgOut = new DataOutputStream(msgSock.getOutputStream());
-                msgIn = new DataInputStream(msgSock.getInputStream());
-                msgOut.writeUTF("Classify");
-                msgOut.flush();
-
-                msgIn.read();
             } catch (Exception e) {
                 //Log.e(IRClient.TAG, e.toString());
                 continue;
             }
         }
 
-        Log.d(IRClient.TAG, "Done");
-        try {
-            OOBOut.writeUTF("Done\n");
-        } catch (Exception e){ }
-        return null;
+        //Log.d(IRClient.TAG, "Done");
+        //try {
+        //    OOBOut.writeUTF("Done\n");
+        //} catch (Exception e){ }
+        //return null;
     }
 }

@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class IRClient extends AppCompatActivity {
-    public static String IR_REQ_ST = "Stream";
+    public static String IR_REQ_ST = "SlideShow";
     public static String SERVER_IP = "173.79.72.37";
     public static final String TAG = "IRClient";
 

@@ -1,15 +1,15 @@
 #Internal package file, do not edit.
-#Thu Apr 19 19:42:30 EDT 2018
-1.base=C\:\\Users\\Tumbleweed\\AndroidStudioProjects\\IRClient\\app\\build\\intermediates\\transforms\\dexMerger\\debug\\11
+#Fri May 04 11:42:41 EDT 2018
+1.base=C\:\\Users\\Tumbleweed\\Desktop\\Proj\\IR-Server\\IRClient_Android\\app\\build\\intermediates\\transforms\\dexMerger\\debug\\12
 2.path=classes.dex
 0.baseType=DIRECTORY
-2.base=C\:\\Users\\Tumbleweed\\AndroidStudioProjects\\IRClient\\app\\build\\intermediates\\transforms\\dexMerger\\debug\\12
+2.base=C\:\\Users\\Tumbleweed\\Desktop\\Proj\\IR-Server\\IRClient_Android\\app\\build\\intermediates\\transforms\\dexMerger\\debug\\11
 2.set=DEX
 1.baseType=DIRECTORY
 count=3
 1.set=DEX
 0.path=lib/armeabi-v7a/libnative-lib.so
 0.set=NATIVE_RESOURCE
-0.base=C\:\\Users\\Tumbleweed\\AndroidStudioProjects\\IRClient\\app\\build\\intermediates\\transforms\\stripDebugSymbol\\debug\\0
+0.base=C\:\\Users\\Tumbleweed\\Desktop\\Proj\\IR-Server\\IRClient_Android\\app\\build\\intermediates\\transforms\\stripDebugSymbol\\debug\\0
 2.baseType=DIRECTORY
 1.path=classes.dex

@@ -5,77 +5,78 @@
     build-mode="COLD"
     density="xxhdpi"
     format="10"
+    ir-eligibility="COMPATIBLE"
     plugin-version="3.1.0"
-    timestamp="1524841777901"
-    token="6635791850267890223"
+    timestamp="1525815875891"
+    token="-5319499402347977988"
     verifier="COLD_SWAP_REQUESTED" >
 
     <task
         name="javac"
-        duration="0" />
+        duration="1924" />
     <task
         name="instant-run-dex"
         duration="0" />
     <task
         name="instant-run-transform"
-        duration="0" />
+        duration="299" />
     <task
         name="verifier"
-        duration="0" />
+        duration="65" />
+
+    <artifact
+        location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\slices\slice_0.apk"
+        type="SPLIT" />
 
     <build
         build-mode="FULL"
-        timestamp="1524838164738"
+        timestamp="1525810961577"
         verifier="FULL_BUILD_REQUESTED" >
         <artifact
-            location="C:\Users\Tumbleweed\AndroidStudioProjects\IRClient\app\build\intermediates\split-apk\debug\slices\slice_0.apk"
+            location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\slices\slice_0.apk"
             type="SPLIT" />
         <artifact
-            location="C:\Users\Tumbleweed\AndroidStudioProjects\IRClient\app\build\intermediates\split-apk\debug\slices\slice_4.apk"
+            location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\slices\slice_3.apk"
             type="SPLIT" />
         <artifact
-            location="C:\Users\Tumbleweed\AndroidStudioProjects\IRClient\app\build\intermediates\split-apk\debug\slices\slice_5.apk"
+            location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\slices\slice_8.apk"
             type="SPLIT" />
         <artifact
-            location="C:\Users\Tumbleweed\AndroidStudioProjects\IRClient\app\build\intermediates\split-apk\debug\slices\slice_6.apk"
+            location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\slices\slice_4.apk"
             type="SPLIT" />
         <artifact
-            location="C:\Users\Tumbleweed\AndroidStudioProjects\IRClient\app\build\intermediates\split-apk\debug\slices\slice_8.apk"
+            location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\slices\slice_1.apk"
             type="SPLIT" />
         <artifact
-            location="C:\Users\Tumbleweed\AndroidStudioProjects\IRClient\app\build\intermediates\split-apk\debug\slices\slice_9.apk"
+            location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\slices\slice_2.apk"
             type="SPLIT" />
         <artifact
-            location="C:\Users\Tumbleweed\AndroidStudioProjects\IRClient\app\build\intermediates\split-apk\debug\slices\slice_2.apk"
+            location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\slices\slice_5.apk"
             type="SPLIT" />
         <artifact
-            location="C:\Users\Tumbleweed\AndroidStudioProjects\IRClient\app\build\intermediates\split-apk\debug\slices\slice_7.apk"
+            location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\slices\slice_6.apk"
             type="SPLIT" />
         <artifact
-            location="C:\Users\Tumbleweed\AndroidStudioProjects\IRClient\app\build\intermediates\split-apk\debug\dep\dependencies.apk"
+            location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\slices\slice_7.apk"
             type="SPLIT" />
         <artifact
-            location="C:\Users\Tumbleweed\AndroidStudioProjects\IRClient\app\build\intermediates\split-apk\debug\slices\slice_3.apk"
+            location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\slices\slice_9.apk"
             type="SPLIT" />
         <artifact
-            location="C:\Users\Tumbleweed\AndroidStudioProjects\IRClient\app\build\intermediates\split-apk\debug\slices\slice_1.apk"
+            location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\dep\dependencies.apk"
             type="SPLIT" />
         <artifact
-            location="C:\Users\Tumbleweed\AndroidStudioProjects\IRClient\app\build\intermediates\instant-run-apk\debug\app-debug.apk"
+            location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\instant-run-apk\debug\app-debug.apk"
             type="SPLIT_MAIN" />
     </build>
     <build
         build-mode="COLD"
         ir-eligibility="COMPATIBLE"
-        timestamp="1524841395445"
+        timestamp="1525815875891"
         verifier="COLD_SWAP_REQUESTED" >
         <artifact
-            location="C:\Users\Tumbleweed\AndroidStudioProjects\IRClient\app\build\intermediates\split-apk\debug\slices\slice_0.apk"
+            location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\slices\slice_0.apk"
             type="SPLIT" />
     </build>
-    <build
-        build-mode="COLD"
-        timestamp="1524841777901"
-        verifier="COLD_SWAP_REQUESTED" />
 
 </instant-run>
