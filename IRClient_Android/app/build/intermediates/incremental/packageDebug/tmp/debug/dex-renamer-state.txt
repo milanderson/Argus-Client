@@ -1,7 +1,4 @@
-#Fri May 04 11:42:41 EDT 2018
-base.0=C\:\\Users\\Tumbleweed\\Desktop\\Proj\\IR-Server\\IRClient_Android\\app\\build\\intermediates\\transforms\\dexMerger\\debug\\12
-path.1=classes.dex
-renamed.1=classes2.dex
+#Fri May 25 17:38:27 EDT 2018
+base.0=C\:\\Users\\Tumbleweed\\Desktop\\Proj\\IR-Server\\IRClient_Android\\app\\build\\intermediates\\transforms\\dexMerger\\debug\\14
 path.0=classes.dex
 renamed.0=classes.dex
-base.1=C\:\\Users\\Tumbleweed\\Desktop\\Proj\\IR-Server\\IRClient_Android\\app\\build\\intermediates\\transforms\\dexMerger\\debug\\11

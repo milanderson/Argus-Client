@@ -10,6 +10,7 @@ import cv2
 
 REFUSE_IR_REQ = "Request not recognized. Valid requests are Train|Classify"
 IR_REQ_ST = 'Stream'
+IR_REQ_MP4ST = 'MP4Stream'
 IR_REQ_TR = 'Train'
 IR_REQ_CL = 'Classify'
 IR_REQ_SS = 'Slideshow'
@@ -89,6 +90,10 @@ class IRDispatcher(Daemon):
                 path = self.next_filename()
                 t = threading.Thread(target=slideshow_thread, args=(conn, path))
                 t.start()
+            elif IR_REQ_MP4ST in data:
+                path = self.next_filename()
+                t = threading.Thread(target=mp4stream_thread, args=(conn, path))
+                t.start()
             else:
                 try:
                     conn.sendall(REFUSE_IR_REQ)
@@ -97,6 +102,85 @@ class IRDispatcher(Daemon):
                     print("Refusing connection.")
                     print(e)
                     continue
+
+def mp4stream_thread(conn, filepath):
+
+    class ReadState(Enum):
+        PPSSEARCH = 0
+        FRAMESEARCH = 1
+        FRAMEREAD = 2
+
+    print("mp4stream")
+    f = open(filepath, 'wb+')
+    cap = cv2.VideoCapture(filepath)
+    print(cap.isOpened)
+    state = ReadState.PPSSEARCH
+
+    try:
+        OOBsInit = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        OOBsInit.bind((SERVER_IP, 50506))
+        OOBs_info = OOBsInit.getsockname()
+        OOBsInit.listen(3)
+
+        print(OOBs_info[1])
+        conn.sendall(str(OOBs_info[1]))
+        OOBs, addr = OOBsInit.accept()
+        conn.sendall(IR_READY)
+    except Exception as e:
+        print("Error creating communication socket")
+        print(e)
+        exit()    # save incoming video file
+        
+    print("reading incoming file")
+    frameSize = 0
+    try:
+        while True:
+            msg = OOBs.recv()
+
+            if state == ReadState.PPSSEARCH:
+                if msg.find("avc") >= 0:
+                    msg = msg[msg.find(b'\x76\x63\x31'):]
+                    msg = msg[msg.find(b'\x42\x80'):]
+                    PPS = msg[:msg.find(b'\x01\x00\04')]
+                    SPS = msg[msg.find(b'\x01\x00\04\x68') + 3:msg.find(b'\x01\x00\04\x68') + 7]
+                    f.write(b'\x00\x00\x00\x01')
+                    f.write(PPS)
+                    f.write(b'\x00\x00\x00\x01')
+                    f.write(SPS)
+                    state = ReadState.FRAMESEARCH
+            if state == ReadState.FRAMESEARCH:
+                if "mdat" in msg:
+                    msg = msg[msg.find("mdat") + 4:]
+                    state = ReadState.FRAMEREAD
+
+            if state == ReadState.FRAMEREAD:
+                #TODO get next frame
+                if frameSize == 0:
+                    f.write(b'\x00\x00\x00\x01')
+                    framesize = (ord(msg[0]) << 24) + (ord(msg[1]) << 16) + (ord(msg[2]) << 8) + (ord(msg[3]))
+                    msg = msg[4:]
+
+                    ret, frame = cap.read()
+                    if ret:
+                        try:
+                            cv2.imshow('frame',frame)
+                            if cv2.waitKey(1) & 0xFF == ord('q'):
+                                break
+                        except Exception as e:
+                            fCount = fCount
+
+                else:
+                    writeAmount = min(frameSize, len(msg))
+                    f.write(msg[:writeAmount])
+                    frameSize -= writeAmount
+
+    except Exception as e:
+        print("Error recieving image.")
+        print(e)
+        f.close()
+        cap.release()
+
+    conn.close()
 
 # recieve H264 encoded stream and save as AVI
 def stream_thread(conn, filepath):
@@ -192,7 +276,7 @@ def classify_thread(conn, filepath):
 
     conn.close()
 
-# recieve anf process a stream of YUV images
+# recieve and process a stream of YUV images
 def slideshow_thread(conn, filepath):
     print("slideshow")
     f = open(filepath, 'wb+')

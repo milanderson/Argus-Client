@@ -1,6 +1,7 @@
 package sbu.irclient;
 
 import android.Manifest;
+import android.content.res.Configuration;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
 import android.media.MediaCodecInfo;
@@ -12,6 +13,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.TextureView;
+import android.view.ViewGroup;
 
 import java.io.File;
 import java.io.IOException;
@@ -31,6 +33,7 @@ public class IRClient extends AppCompatActivity {
     public static boolean frameInUse = false;
     public static byte[] frame = null;
 
+    public static IRView overlayView;
     private TextureView texView;
     private boolean fileSwitched = false;
     private Camera cam;
@@ -49,10 +52,12 @@ public class IRClient extends AppCompatActivity {
 
         setContentView(R.layout.activity_irclient);
         texView = findViewById(R.id.textureView);
+        overlayView = new IRView(this);
+        addContentView(overlayView, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         Log.d(TAG, "init Cam");
         //checkCapabilities();
-        initCam();
+        initCamView();
 
         // resting
         Log.d(TAG, "resting");
@@ -120,38 +125,15 @@ public class IRClient extends AppCompatActivity {
         }
     }
 
-    private void initCam(){
-        int width = 640;
-        int height = 480;
-
-        // Media Recorder Attempt
-        cam = Camera.open();
-        cam.setDisplayOrientation(90);
-        Camera.Parameters param = cam.getParameters();
-        param.setPreviewSize(width, height);
-        cam.setParameters(param);
-        cam.setPreviewCallback(new Camera.PreviewCallback() {
-            @Override
-            public void onPreviewFrame(byte[] bytes, Camera camera) {
-                if(!frameInUse){
-                    IRClient_NetTask.sendTime.add(System.currentTimeMillis());
-                    frame = bytes;
-                }
-            }
-        });
-
+    private void initCamView(){
         texView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
             @Override
             public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+                initCam();
                 try {
                     cam.setPreviewTexture(surface);
                     cam.startPreview();
 
-                    /*
-                    initRecorder("Init");
-
-                    TimeUnit.MILLISECONDS.sleep(1000);
-                    */
                     new IRClient_NetTask().execute();
                     while(!IRClient_NetTask.ready){}
                 } catch (Exception e){
@@ -165,26 +147,36 @@ public class IRClient extends AppCompatActivity {
 
             @Override
             public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
+                Log.d(TAG, "surface dead, releasing camera");
                 return false;
             }
 
             @Override
             public void onSurfaceTextureUpdated(SurfaceTexture surface) {
-                /*
-                try{
-                    if(!fileSwitched){
-                        rec.stop();
+            }
+        });
+    }
 
-                        initRecorder("Output");
-                        Log.d(TAG, "switch successful");
-                        fileSwitched = true;
-                    } else {
-                        encodeTimes.add(System.currentTimeMillis());
-                    }
-                } catch (Exception e){
-                    Log.e(TAG, e.toString());
+    private void initCam() {
+        int width = 640;
+        int height = 480;
+
+        // Media Recorder Attempt
+        cam = Camera.open();
+        if (this.getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
+            cam.setDisplayOrientation(90);
+        }
+        Camera.Parameters param = cam.getParameters();
+        param.setPreviewSize(width, height);
+        Log.e(TAG, "Picture format " + param.getPreviewFormat());
+        cam.setParameters(param);
+        cam.setPreviewCallback(new Camera.PreviewCallback() {
+            @Override
+            public void onPreviewFrame(byte[] bytes, Camera camera) {
+                if (!frameInUse) {
+                    IRClient_NetTask.sendTime.add(System.currentTimeMillis());
+                    frame = bytes;
                 }
-                */
             }
         });
     }
@@ -269,4 +261,26 @@ public class IRClient extends AppCompatActivity {
         permGranted = 2;
     }
 
+    @Override
+    public void onConfigurationChanged(Configuration newConf){
+        super.onConfigurationChanged(newConf);
+
+        try {
+            if (newConf.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                cam.setDisplayOrientation(0);
+            } else {
+                cam.setDisplayOrientation(90);
+            }
+        } catch (Exception e){
+            Log.e(TAG, e.toString());
+        }
+    }
+
+    @Override
+    public void onPause(){
+        super.onPause();
+        cam.stopPreview();
+        cam.setPreviewCallback(null);
+        cam.release();
+    }
 }

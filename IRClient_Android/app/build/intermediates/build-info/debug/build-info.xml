@@ -7,22 +7,22 @@
     format="10"
     ir-eligibility="COMPATIBLE"
     plugin-version="3.1.0"
-    timestamp="1525815875891"
+    timestamp="1527265099564"
     token="-5319499402347977988"
     verifier="COLD_SWAP_REQUESTED" >
 
     <task
         name="javac"
-        duration="1924" />
+        duration="1352" />
     <task
         name="instant-run-dex"
         duration="0" />
     <task
         name="instant-run-transform"
-        duration="299" />
+        duration="109" />
     <task
         name="verifier"
-        duration="65" />
+        duration="35" />
 
     <artifact
         location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\slices\slice_0.apk"
@@ -30,11 +30,8 @@
 
     <build
         build-mode="FULL"
-        timestamp="1525810961577"
+        timestamp="1527262693210"
         verifier="FULL_BUILD_REQUESTED" >
-        <artifact
-            location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\slices\slice_0.apk"
-            type="SPLIT" />
         <artifact
             location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\slices\slice_3.apk"
             type="SPLIT" />
@@ -49,6 +46,9 @@
             type="SPLIT" />
         <artifact
             location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\slices\slice_2.apk"
+            type="SPLIT" />
+        <artifact
+            location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\slices\slice_0.apk"
             type="SPLIT" />
         <artifact
             location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\slices\slice_5.apk"
@@ -72,7 +72,7 @@
     <build
         build-mode="COLD"
         ir-eligibility="COMPATIBLE"
-        timestamp="1525815875891"
+        timestamp="1527265099564"
         verifier="COLD_SWAP_REQUESTED" >
         <artifact
             location="C:\Users\Tumbleweed\Desktop\Proj\IR-Server\IRClient_Android\app\build\intermediates\split-apk\debug\slices\slice_0.apk"
