@@ -20,6 +20,7 @@ import java.util.Queue;
 public class IRClient_NetTask extends AsyncTask<Void, Void, Void> {
     public static String IR_REQ_ST = "SlideShow";
     public static String SERVER_IP = "130.245.158.1";
+    public static int SERVER_PORT = 50505;
     public static boolean ready = false;
     public static DataOutputStream msgOut, OOBOut;
     public static InputStream msgIn, OOBIn;
@@ -34,7 +35,7 @@ public class IRClient_NetTask extends AsyncTask<Void, Void, Void> {
         Socket msgSock;
 
         try {
-            hostMain = new InetSocketAddress(SERVER_IP, 50505);
+            hostMain = new InetSocketAddress(SERVER_IP, SERVER_PORT);
 
             msgSock = new Socket(hostMain.getAddress(), hostMain.getPort());
             msgSock.setSoTimeout(1000);
@@ -83,7 +84,10 @@ public class IRClient_NetTask extends AsyncTask<Void, Void, Void> {
                     String recvMsg = new String(recvBuf, 0 , bytesRead);
                     //Log.d(IRClient.TAG, "Recieved " + Integer.toString(recvMsg.length()) + " bytes:"  + recvMsg);
 
+                    // Use for receiving a comma separated list of bounding rectangles coordinates in plain text
                     //IRClient.overlayView.setRectList(recvMsg);
+
+                    // use for receiving an NxN bitmask flagging pixels covering the object
                     float[] bitMask = new float[29*29];
                     int maskItem = 0;
                     int lastItem = 0;
