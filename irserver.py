@@ -2,7 +2,7 @@
 # requests. Runs as a daemon, listening for incoming requests
 # and dispatching them to threads for training or classification.
 
-import os, sys, time, socket, select, threading
+import os, sys, time, socket, select, threading, Boxify
 from datetime import datetime
 from daemon import Daemon
 import numpy as np
@@ -279,36 +279,81 @@ def classify_thread(conn, filepath):
 # recieve and process a stream of YUV images
 def slideshow_thread(conn, filepath):
     print("slideshow")
-    f = open(filepath, 'wb+')
-    fRead = open(filepath, "rb+")
+    f = open(filepath, 'wb')
+    fRead = open(filepath, "rb")
 
     try:
         conn.sendall(IR_READY)
-        datasize = 0
+        byteArray = None
         while True:
             data = conn.recv(1024)
             f.write(data)
 
             #print(data)
-
-            if datasize < 463000:
-                datasize += len(data)
+         
+            if byteArray == None:
+                byteArray = fRead.read(460800)
+            if len(byteArray) < 460800:
+                byteArray = byteArray + fRead.read(460800 - len(byteArray))
             else:
                 print("frame recieved")
-                datasize = datasize % 460800
                 w = 640
                 h = 480
-	
-                byteArray = fRead.read(460800)
+                
                 byteArray = np.frombuffer(byteArray, dtype=np.uint8)
                 byteArray = np.reshape(byteArray, (h*3/2, w))
 
                 RGBMatrix = cv2.cvtColor(byteArray, cv2.COLOR_YUV2BGR_NV21)
 
-                cv2.imshow('frame', RGBMatrix)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
+                #for tuple in relay_frame_classify_req(RGBMatrix):
+                #    conn.sendall(str(tuple[0]) + "," + str(tuple[1]) + "," + str(tuple[2]) + "," + str(tuple[3]) + ",")
+                bitMask = []
+		bitMask.append([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
+                bitMask.append([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
+               
+                for itr in range(7):
+                    for item in bitMask1:
+                        conn.sendall(str(item))
+                        conn.sendall(",")
+                for itr in range(15):
+                    for item in bitMask2:
+                        conn.sendall(str(item))
+                        conn.sendall(",")
+                for itr in range(7):
+                    for item in bitMask1:
+                        conn.sendall(str(item))
+                        conn.sendall(",")
+                #cv2.imshow('frame', RGBMatrix)
+                #if cv2.waitKey(1) & 0xFF == ord('q'):
+                #    break
                 
+                byteArray = None
                 conn.sendall("RECEIVED")
 
         f.close()
@@ -359,6 +404,10 @@ def YUVtoRGB(filename):
 
     RGBMatrix = cv2.cvtColor(byteArray, cv2.COLOR_YUV2BGR_NV21)
     return RGBMatrix
+
+# pass an image to a classifier
+def relay_frame_classify_req(frame):
+    return Boxify.boxify(frame)
 
 # init daemon
 if __name__ == "__main__":
