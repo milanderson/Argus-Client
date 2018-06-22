@@ -22,8 +22,6 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class IRClient extends AppCompatActivity {
-    public static String IR_REQ_ST = "SlideShow";
-    public static String SERVER_IP = "173.79.72.37";
     public static final String TAG = "IRClient";
 
     public static File mOutputFile = null;
@@ -65,7 +63,7 @@ public class IRClient extends AppCompatActivity {
     }
 
     private int checkPermissions(){
-        String[] perm = {Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.INTERNET, Manifest.permission.WRITE_EXTERNAL_STORAGE};
+        String[] perm = {Manifest.permission.CAMERA, Manifest.permission.INTERNET};
         boolean permOK = true;
 
         for(int i = 0; i < perm.length; i++){
@@ -74,17 +72,19 @@ public class IRClient extends AppCompatActivity {
             }
         }
 
-        if(!permOK){
+        while(!permOK){
+            permOK = true;
             try {
                 ActivityCompat.requestPermissions(this, perm, 0);
             } catch (Exception e){
-                Log.d(TAG, e.toString());
+                //Log.d(TAG, e.toString());
                 return -1;
             }
 
-            while(permGranted == 0) {}
-            if (permGranted == 1){
-                return -1;
+            for(int i = 0; i < perm.length; i++){
+                if(android.support.v4.content.ContextCompat.checkSelfPermission(this, perm[i]) != android.content.pm.PackageManager.PERMISSION_GRANTED){
+                    permOK = false;
+                }
             }
         }
 
@@ -147,7 +147,7 @@ public class IRClient extends AppCompatActivity {
 
             @Override
             public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
-                Log.d(TAG, "surface dead, releasing camera");
+                //Log.d(TAG, "surface dead, releasing camera");
                 return false;
             }
 
@@ -279,8 +279,10 @@ public class IRClient extends AppCompatActivity {
     @Override
     public void onPause(){
         super.onPause();
-        cam.stopPreview();
-        cam.setPreviewCallback(null);
-        cam.release();
+        if(cam != null) {
+            cam.stopPreview();
+            cam.setPreviewCallback(null);
+            cam.release();
+        }
     }
 }

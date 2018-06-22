@@ -18,7 +18,9 @@ import java.util.LinkedList;
 import java.util.Queue;
 
 public class IRClient_NetTask extends AsyncTask<Void, Void, Void> {
-
+    public static String IR_REQ_ST = "SlideShow";
+    public static String SERVER_IP = "130.245.158.1";
+    public static int SERVER_PORT = 50505;
     public static boolean ready = false;
     public static DataOutputStream msgOut, OOBOut;
     public static InputStream msgIn, OOBIn;
@@ -29,14 +31,14 @@ public class IRClient_NetTask extends AsyncTask<Void, Void, Void> {
     protected Void doInBackground(Void... voids) {
         int bytesRead;
         Log.d(IRClient.TAG, "Socket init");
-        InetSocketAddress hostMain, hostOOB;
-        Socket msgSock, OOBSock;
+        InetSocketAddress hostMain;
+        Socket msgSock;
 
         try {
-            hostMain = new InetSocketAddress(IRClient.SERVER_IP, 50505);
+            hostMain = new InetSocketAddress(SERVER_IP, SERVER_PORT);
 
             msgSock = new Socket(hostMain.getAddress(), hostMain.getPort());
-            msgSock.setSoTimeout(1500);
+            msgSock.setSoTimeout(1000);
 
             Log.d(IRClient.TAG, "Initializing message socket");
             msgOut = new DataOutputStream(msgSock.getOutputStream());
@@ -45,7 +47,8 @@ public class IRClient_NetTask extends AsyncTask<Void, Void, Void> {
             msgOut.writeUTF("Slideshow");
             msgOut.flush();
 
-            msgIn.read();
+            byte stMsg[] = new byte[20];
+            msgIn.read(stMsg);
 
             ready = true;
         } catch (Exception e) {
@@ -74,14 +77,30 @@ public class IRClient_NetTask extends AsyncTask<Void, Void, Void> {
 
                 ticker++;
 
-                if (( bytesRead = msgIn.read(recvBuf)) > 0){
+                if (msgIn.available() >= 1682 && ( bytesRead = msgIn.read(recvBuf, 0, 1690)) > 0){
                     long recvTime = System.currentTimeMillis();
                     Log.e(IRClient.TAG, "RTT: " + Long.toString(recvTime - sendTime.poll()));
 
                     String recvMsg = new String(recvBuf, 0 , bytesRead);
-                    //Log.d(IRClient.TAG, "Recieved: " + recvMsg);
+                    //Log.d(IRClient.TAG, "Recieved " + Integer.toString(recvMsg.length()) + " bytes:"  + recvMsg);
 
-                    IRClient.overlayView.setRectList(recvMsg);
+                    //IRClient.overlayView.setRectList(recvMsg);
+                    float[] bitMask = new float[29*29];
+                    int maskItem = 0;
+                    int lastItem = 0;
+                    for (int item = 0; item < recvMsg.length(); item++){
+                        if(recvMsg.charAt(item) == ','){
+                            if(item != lastItem){
+                                bitMask[maskItem] = Float.parseFloat(recvMsg.substring(lastItem, item));
+                                maskItem++;
+                                lastItem = item + 1;
+                            }
+                        }
+                        if(recvMsg.charAt(item) == 'R'){
+                            break;
+                        }
+                    }
+                    IRClient.overlayView.setContoursFromBitMask(bitMask);
                 } else {
                     IRClient.overlayView.clear();
                 }
