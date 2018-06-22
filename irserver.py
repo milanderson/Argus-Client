@@ -337,17 +337,9 @@ def slideshow_thread(conn, filepath):
                 bitMask.append([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
                 bitMask.append([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
                
-                for itr in range(7):
-                    for item in bitMask1:
-                        conn.sendall(str(item))
-                        conn.sendall(",")
-                for itr in range(15):
-                    for item in bitMask2:
-                        conn.sendall(str(item))
-                        conn.sendall(",")
-                for itr in range(7):
-                    for item in bitMask1:
-                        conn.sendall(str(item))
+                for line in bitMask:
+                    for bit in line:
+                        conn.sendall(str(bit))
                         conn.sendall(",")
                 #cv2.imshow('frame', RGBMatrix)
                 #if cv2.waitKey(1) & 0xFF == ord('q'):
