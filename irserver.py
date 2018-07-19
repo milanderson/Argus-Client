@@ -5,6 +5,7 @@
 import os, sys, time, socket, select, threading, Boxify
 from datetime import datetime
 from daemon import Daemon
+from random import *
 import numpy as np
 import cv2
 
@@ -282,6 +283,8 @@ def slideshow_thread(conn, filepath):
     f = open(filepath, 'wb')
     fRead = open(filepath, "rb")
 
+    classes = ["Fish", "Car", "Stick", "Hand", "Florida", "Pepper"]
+
     try:
         conn.sendall(IR_READY)
         byteArray = None
@@ -305,8 +308,8 @@ def slideshow_thread(conn, filepath):
 
                 RGBMatrix = cv2.cvtColor(byteArray, cv2.COLOR_YUV2BGR_NV21)
 
-                #for tuple in relay_frame_classify_req(RGBMatrix):
-                #    conn.sendall(str(tuple[0]) + "," + str(tuple[1]) + "," + str(tuple[2]) + "," + str(tuple[3]) + ",")
+                for tuple in relay_frame_classify_req(RGBMatrix):
+                    conn.sendall(str(tuple[0]) + "," + str(tuple[1]) + "," + str(tuple[2]) + "," + str(tuple[3]) + "," + classes[randint(0, len(classes) - 1)] + "," + classes[randint(0, len(classes) - 1)] + "," + classes[randint(0, len(classes) - 1)] + ",")
                 bitMask = []
 		bitMask.append([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
                 bitMask.append([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
