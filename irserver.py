@@ -59,6 +59,7 @@ class IRDispatcher(Daemon):
             s.bind((SERVER_IP, 50505))
             print(s.getsockname())
             s.listen(3)
+
         except Exception as e:
             print("Socket failed to init.")
             print(e)
@@ -67,7 +68,6 @@ class IRDispatcher(Daemon):
         while True:
             try:
                 conn, addr = s.accept()
-                print("Accepted")
                 data = conn.recv(1024)
                 print(data)
             except Exception as e:
@@ -287,43 +287,50 @@ def slideshow_thread(conn, filepath):
 
     try:
         conn.sendall(IR_READY)
-        byteArray = None
+        byteArray = ""
         while True:
-            data = conn.recv(1024)
+            data = conn.recv(460800)
             f.write(data)
-
-            #print(data)
          
-            if byteArray == None:
-                byteArray = fRead.read(460800)
+
             if len(byteArray) < 460800:
-                byteArray = byteArray + fRead.read(460800 - len(byteArray))
+                byteArray = byteArray + fRead.read(460800)
             else:
-                print("frame recieved")
+                print("full frame")
                 w = 640
                 h = 480
                 
-                byteArray = np.frombuffer(byteArray, dtype=np.uint8)
-                byteArray = np.reshape(byteArray, (h*3/2, w))
+                frame = byteArray[:460800]
+                byteArray = byteArray[460800:]
+                frame = np.frombuffer(frame, dtype=np.uint8)
+                frame = np.reshape(frame, (h*3/2, w))
 
-                RGBMatrix = cv2.cvtColor(byteArray, cv2.COLOR_YUV2BGR_NV21)
+                RGBMatrix = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_NV21)
 
-                for tuple in relay_frame_classify_req(RGBMatrix):
-                    conn.sendall(str(tuple[0]) + "," + str(tuple[1]) + "," + str(tuple[2]) + "," + str(tuple[3]) + "," + classes[randint(0, len(classes) - 1)] + "," + classes[randint(0, len(classes) - 1)] + "," + classes[randint(0, len(classes) - 1)] + ",")
-                #bitMask = []
-		#bitMask.append([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
-                #bitMask.append([0,0,0,0,0,0,0,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0])
-                #bitMask.append([0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0])
-               
-                #for line in bitMask:
-                #    for bit in line:
-                #        conn.sendall(str(bit))
-                #        conn.sendall(",")
+                rectCount = 0
+                #for tuple in relay_frame_classify_req(RGBMatrix):
+                #    if tuple[2]*tuple[3] > 300 and rectCount < 50:
+                #        conn.sendall(str(tuple[0]) + "," + str(tuple[1]) + "," + str(tuple[2]) + "," + str(tuple[3]) + "," + classes[randint(0, len(classes) - 1)] + "," + classes[randint(0, len(classes) - 1)] + "," + classes[randint(0, len(classes) - 1)] + ",")
+                #        rectCount += 1
+
+                for i in range(4):
+                    conn.sendall("0,19,-")
+
+                conn.sendall("0,4,1,2,0,2,1,7,0,4,-")
+                conn.sendall("0,4,1,2,0,2,1,7,0,4,-")
+                conn.sendall("0,4,1,2,0,2,1,7,0,4,-")
+                conn.sendall("0,4,1,2,0,2,1,7,0,4,-")
+
+                for i in range(11):
+                    conn.sendall("0,4,1,11,0,4,-")
+
+                for i in range(4):
+                    conn.sendall("0,19,-")
+
                 #cv2.imshow('frame', RGBMatrix)
                 #if cv2.waitKey(1) & 0xFF == ord('q'):
                 #    break
                 
-                byteArray = None
                 conn.sendall("RECEIVED")
 
         f.close()
