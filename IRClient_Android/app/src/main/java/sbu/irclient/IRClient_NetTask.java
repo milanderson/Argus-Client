@@ -1,117 +1,196 @@
 package sbu.irclient;
 
-import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.Paint;
-import android.graphics.Rect;
 import android.os.AsyncTask;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.FileInputStream;
-import java.io.InputStream;
 import java.net.InetSocketAddress;
-import java.net.Socket;
-import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.Queue;
+import java.nio.ByteBuffer;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.SocketChannel;
+import java.util.Iterator;
 
-public class IRClient_NetTask extends AsyncTask<Void, Void, Void> {
+public class IRClient_NetTask extends AsyncTask<IRClient, Void, Void> {
     public static String IR_REQ_ST = "SlideShow";
     public static String SERVER_IP = "130.245.158.1";
-    public static int SERVER_PORT = 50505;
-    public static boolean ready = false;
-    public static DataOutputStream msgOut, OOBOut;
-    public static InputStream msgIn, OOBIn;
-    public static Queue<Long> sendTime = new LinkedList<Long>();
-    FileInputStream inputStream;
+    public final int SERVER_PORT = 50505;
+    public final int ALT_PORT = 50506;
+
+    private int MSGSIZE = 2400;
+    private Selector selector;
+    SelectionKey pipeKey, sReadKey, sWriteKey;
+    private ByteBuffer signalOutBuf = ByteBuffer.allocate(200);
+    private String recvMsg = null;
+
+    private Runnable clear_overlay = new Runnable(){
+        @Override
+        public void run(){
+            IRClient.overlayView.clear();
+        }
+    };
+    private Runnable update_rects = new Runnable() {
+        @Override
+        public void run() {
+            IRClient.overlayView.setRectList(recvMsg);
+        }
+    };
+    private Runnable update_bitmask = new Runnable() {
+        @Override
+        public void run() {
+            IRClient.overlayView.setContoursFromBitMask(recvMsg);
+        }
+    };
 
     @Override
-    protected Void doInBackground(Void... voids) {
+    protected Void doInBackground(IRClient... clients) {
         int bytesRead;
-        Log.d(IRClient.TAG, "Socket init");
-        InetSocketAddress hostMain;
-        Socket msgSock;
+        IRClient client = clients[0];
+        // Get a handler that can be used to post to the main thread
+        Handler mainHandler = new Handler(IRClient.context.getMainLooper());
+        Looper.prepare();
+
+        SocketChannel msgSock;
+        byte stMsg[] = new byte[MSGSIZE];
+        ByteBuffer recvBuf = ByteBuffer.wrap(stMsg);
+
+        InetSocketAddress hostMain = new InetSocketAddress(SERVER_IP, ALT_PORT);
 
         try {
-            hostMain = new InetSocketAddress(SERVER_IP, SERVER_PORT);
+            Log.d(IRClient.TAG, "Initializing network thread");
 
-            msgSock = new Socket(hostMain.getAddress(), hostMain.getPort());
-            msgSock.setSoTimeout(1000);
+            msgSock = SocketChannel.open();
+            msgSock.connect(new InetSocketAddress(SERVER_IP, SERVER_PORT));
 
-            Log.d(IRClient.TAG, "Initializing message socket");
-            msgOut = new DataOutputStream(msgSock.getOutputStream());
-            msgIn = msgSock.getInputStream();
+            msgSock.write(ByteBuffer.wrap("Slideshow".getBytes()));
+            msgSock.read(recvBuf);
 
-            msgOut.writeUTF("Slideshow");
-            msgOut.flush();
-
-            byte stMsg[] = new byte[20];
-            msgIn.read(stMsg);
-
-            ready = true;
+            selector = Selector.open();
+            pipeKey = IRClient.pipe.source().register(selector, SelectionKey.OP_READ);
+            msgSock.configureBlocking(false);
+            sReadKey = msgSock.register(selector, SelectionKey.OP_READ);
+            Log.d(IRClient.TAG, "network thread initialized");
         } catch (Exception e) {
-            Log.e(IRClient.TAG, "Socket init error");
-            Log.e(IRClient.TAG, e.toString());
+            Log.e(IRClient.TAG, "Socket init error.\n" + e.toString());
+            client.onRunStateChanged("Connection failed, exiting", IRClient.State.FAILURE);
             return null;
         }
-        byte recvBuf[] = new byte[2400];
-        int ticker = 0;
 
+        int lastRead = 0;
+        boolean msgComplete;
         byte[] buf = null;
+        recvBuf.clear();
 
         while (true) {
             try {
-                while(IRClient.frame == null){}
-                buf = IRClient.frame;
-                IRClient.frameInUse = true;
+                selector.select();
 
-                //Log.d(IRClient.TAG, "Sending chunk size " + Integer.toString(buf.length));
-                msgOut.write(buf, 0, buf.length);
-                //msgOut.writeUTF("Done");
-                msgOut.flush();
+                Iterator<SelectionKey> iter = selector.selectedKeys().iterator();
 
-                IRClient.frameInUse = false;
-                IRClient.frame = null;
+                while (iter.hasNext()) {
+                    SelectionKey key = iter.next();
 
-                ticker++;
+                    // send frame data
+                    if (key.isReadable() && key == pipeKey) {
+                        signalOutBuf.clear();
+                        IRClient.pipe.source().read(signalOutBuf);
+                        signalOutBuf.flip();
+                        String pipeMsg = "";
 
-                if (msgIn.available() >= 1682 && ( bytesRead = msgIn.read(recvBuf, 0, 1690)) > 0){
-                    long recvTime = System.currentTimeMillis();
-                    Log.e(IRClient.TAG, "RTT: " + Long.toString(recvTime - sendTime.poll()));
+                        while(signalOutBuf.hasRemaining()){
+                            char ch = (char) signalOutBuf.get();
+                            pipeMsg += ch;
+                        }
+                        Log.d(IRClient.TAG, "Pipemsg: " + pipeMsg);
 
-                    String recvMsg = new String(recvBuf, 0 , bytesRead);
-                    //Log.d(IRClient.TAG, "Recieved " + Integer.toString(recvMsg.length()) + " bytes:"  + recvMsg);
+                        if(pipeMsg.contains("frame") && IRClient.getState() == IRClient.State.CLASSIFY) {
+                            buf = IRClient.frame;
+                            //Log.d(IRClient.TAG, "Sending chunk size " + Integer.toString(buf.length));
 
-                    // Use for receiving a comma separated list of bounding rectangles coordinates in plain text
-                    //IRClient.overlayView.setRectList(recvMsg);
+                            //String frameString = byteToHexString(buf);
+                            //Log.d(IRClient.TAG, frameString);
+                            int bytesWritten = 0;
+                            while(bytesWritten < buf.length){
+                                //Log.d(IRClient.TAG, Boolean.toString(sWriteKey.isWritable()));
+                                ByteBuffer frameBuf = ByteBuffer.allocate(buf.length - bytesWritten);
+                                frameBuf.put(buf, bytesWritten, buf.length - bytesWritten);
+                                frameBuf.flip();
 
-                    // use for receiving an NxN bitmask flagging pixels covering the object
-                    float[] bitMask = new float[29*29];
-                    int maskItem = 0;
-                    int lastItem = 0;
-                    for (int item = 0; item < recvMsg.length(); item++){
-                        if(recvMsg.charAt(item) == ','){
-                            if(item != lastItem){
-                                bitMask[maskItem] = Float.parseFloat(recvMsg.substring(lastItem, item));
-                                maskItem++;
-                                lastItem = item + 1;
+                                //Log.d(IRClient.TAG, "pos: " + Integer.toString(frameBuf.position()) + " remaining: " + Integer.toString(frameBuf.remaining()));
+                                bytesWritten += msgSock.write(frameBuf);
+                                //Log.d(IRClient.TAG,"wrote: " + Integer.toString(bytesWritten));
                             }
                         }
-                        if(recvMsg.charAt(item) == 'R'){
-                            break;
+
+                        if(pipeMsg.contains("reply")){
+                            pipeMsg = pipeMsg.substring(pipeMsg.indexOf("reply") + 5);
+                            String replyMsg = pipeMsg.substring(0,pipeMsg.indexOf(',') - 1);
                         }
                     }
-                    IRClient.overlayView.setContoursFromBitMask(bitMask);
-                } else {
-                    IRClient.overlayView.clear();
+
+                    // receive and process incoming msg
+                    else if (key.isReadable() && key == sReadKey){
+
+                        msgComplete = false;
+                        // read new data
+                        lastRead += msgSock.read(recvBuf);
+                        // convert data to string and search for end-of message
+                        String checkString = new String(stMsg, 0, lastRead);
+                        //Log.d(IRClient.TAG, checkString);
+                        int lineEnd = checkString.indexOf("RECEIVED");
+
+                        //if message is complete convert to string and shift original buffer
+                        if(lineEnd > 0){
+                            recvMsg = new String(stMsg, 0, lineEnd);
+                            if(lastRead - (lineEnd + 8) >= 0) {
+                                System.arraycopy(stMsg, lineEnd + 8, stMsg, 0, lastRead - (lineEnd + 8));
+                                lastRead = lastRead - (lineEnd + 8);
+                                recvBuf = ByteBuffer.wrap(stMsg);
+                                recvBuf.position(lastRead);
+                            } else {
+                                lastRead = 0;
+                            }
+                            msgComplete = true;
+                        }
+
+                        if (msgComplete){
+                            long recvTime = System.currentTimeMillis();
+                            Log.e(IRClient.TAG, "RTT: " + Long.toString(recvTime - IRClient.sendTime));
+                            //Log.d(IRClient.TAG, "Recieved " + Integer.toString(recvMsg.length()) + " bytes:"  + recvMsg);
+
+                            // Use for receiving a plain text, comma separated list of bounding rectangles coordinates
+                            //mainHandler.post(update_rects);
+
+
+                            // use for receiving a plain text, run length encoded NxN bitmask flagging pixels covering the object
+                            mainHandler.post(update_bitmask);
+                        } else {
+                            mainHandler.post(clear_overlay);
+                        }
+                    }
+
+                    iter.remove();
                 }
+
             } catch (Exception e) {
-                Log.e(IRClient.TAG, e.toString());
+                Log.e(IRClient.TAG, "Network thread error. " + e.toString());
                 continue;
             }
         }
         //return null;
+    }
+
+    private String byteToHexString(byte[] bytes){
+        char[] hexArray = "0123456789ABCDEF".toCharArray();
+        char[] hexChars = new char[bytes.length * 2];
+        int i = 0;
+        for ( int j = 0; j < bytes.length; j++ ) {
+            int v = bytes[j] & 0xFF;
+            hexChars[i * 2] = hexArray[v >>> 4];
+            hexChars[i * 2 + 1] = hexArray[v & 0x0F];
+            i++;
+        }
+        return new String(hexChars);
     }
 }

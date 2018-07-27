@@ -10,7 +10,7 @@ def boxify(im):
     im2, contours, hierarchy = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
 
     for cont in contours:
-        x,y,w,h = cv2.boundingRect(countours)
+        x,y,w,h = cv2.boundingRect(cont)
         #print(x + " " + y + " " + w + " " + h + " ")
         rects.append((x, y, w, h))
         

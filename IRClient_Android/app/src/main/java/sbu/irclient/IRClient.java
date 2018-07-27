@@ -1,6 +1,8 @@
 package sbu.irclient;
 
 import android.Manifest;
+import android.content.Context;
+import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
@@ -12,46 +14,84 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.TextureView;
+import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.Toast;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.Pipe;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Callable;
+
+import static android.os.SystemClock.sleep;
 
 public class IRClient extends AppCompatActivity {
     public static final String TAG = "IRClient";
+    public enum State {FAILURE, RESPOND, CLASSIFY, IDENTIFY}
+    private static State RunState = State.CLASSIFY;
 
     public static File mOutputFile = null;
     public static File mInitFile = null;
     public static MediaRecorder rec;
+    public static List<Long> encodeTimes = new ArrayList<>(10);
 
-    public static boolean frameInUse = false;
+    public static Pipe pipe;
+    private ByteBuffer signalInBuf = ByteBuffer.allocate(10);
     public static byte[] frame = null;
+    public static long sendTime = 0;
 
     public static IRView overlayView;
     private TextureView texView;
-    private boolean fileSwitched = false;
+    public static Button TLbutton, TRbutton, BRbutton, BLbutton;
+    private Toast toast;
+    public static Context context;
     private Camera cam;
-    public static List<Long> encodeTimes = new ArrayList<>(10);
+
     private int permGranted = 0;
+
+    private Camera.PreviewCallback framePasser = new Camera.PreviewCallback() {
+        @Override
+        public void onPreviewFrame(byte[] bytes, Camera camera) {
+            frame = bytes;
+            sendTime = System.currentTimeMillis();
+            try {
+                if(getState() == State.CLASSIFY) {
+                    String testData = "frame";
+                    signalInBuf.clear();
+                    signalInBuf.put(testData.getBytes());
+                    signalInBuf.flip();
+                    while (signalInBuf.hasRemaining()) {
+                        pipe.sink().write(signalInBuf);
+                    }
+                }
+            } catch (Exception e){
+                Log.e(TAG, "Failure Communicating with Network Thread. " + e.toString());
+            }
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+
         setContentView(R.layout.activity_irclient);
+        context = getApplicationContext();
         Log.d(TAG, "Starting");
 
         if(checkPermissions() == -1){
             return;
         }
 
-        setContentView(R.layout.activity_irclient);
-        texView = findViewById(R.id.textureView);
-        overlayView = new IRView(this);
-        addContentView(overlayView, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        initViews();
+        initButtons();
 
         Log.d(TAG, "init Cam");
         //checkCapabilities();
@@ -59,7 +99,6 @@ public class IRClient extends AppCompatActivity {
 
         // resting
         Log.d(TAG, "resting");
-        //while(true){}
     }
 
     private int checkPermissions(){
@@ -72,6 +111,7 @@ public class IRClient extends AppCompatActivity {
             }
         }
 
+        int attempts = 0;
         while(!permOK){
             permOK = true;
             try {
@@ -85,6 +125,10 @@ public class IRClient extends AppCompatActivity {
                 if(android.support.v4.content.ContextCompat.checkSelfPermission(this, perm[i]) != android.content.pm.PackageManager.PERMISSION_GRANTED){
                     permOK = false;
                 }
+            }
+            attempts++;
+            if(attempts > 100){
+                onRunStateChanged("Permissions Not Granted", State.FAILURE);
             }
         }
 
@@ -125,7 +169,114 @@ public class IRClient extends AppCompatActivity {
         }
     }
 
+    private void initViews(){
+        setContentView(R.layout.activity_irclient);
+        texView = findViewById(R.id.textureView);
+        overlayView = new IRView(this);
+        overlayView.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View view, MotionEvent motionEvent) {
+                if(overlayView.setButtons((int)motionEvent.getX(), (int)motionEvent.getY())) {
+                    onRunStateChanged(null, State.RESPOND);
+                }
+                return false;
+            }
+        });
+        addContentView(overlayView, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    }
+
+    private void initButtons(){
+        try {
+            TLbutton = findViewById(R.id.buttonTL);
+            TRbutton = findViewById(R.id.buttonTR);
+            BLbutton = findViewById(R.id.buttonBL);
+            BRbutton = findViewById(R.id.buttonBR);
+
+            TLbutton.setOnClickListener(new View.OnClickListener(){
+                @Override
+                public void onClick(View v) {
+                    if(getState() == State.RESPOND) {
+                        try {
+                            Log.e(TAG, "button 1");
+                            String strMsg = "reply" + TLbutton.getText().toString() + ",";
+                            ByteBuffer msg = ByteBuffer.allocate(strMsg.getBytes().length);
+                            msg.put(strMsg.getBytes());
+                            msg.flip();
+                            pipe.sink().write(msg);
+                            onRunStateChanged(null, State.RESPOND);
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error clicking button." + e.toString());
+                        }
+                    }
+                }
+            });
+            TRbutton.setOnClickListener(new View.OnClickListener(){
+                @Override
+                public void onClick(View v) {
+
+                    if (getState() == State.RESPOND) {
+                        try {
+                            Log.e(TAG, "button 2");
+                            String strMsg = "reply" + TRbutton.getText().toString() + ",";
+                            ByteBuffer msg = ByteBuffer.allocate(strMsg.getBytes().length);
+                            msg.put(strMsg.getBytes());
+                            msg.flip();
+                            pipe.sink().write(msg);
+                            onRunStateChanged(null, State.RESPOND);
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error clicking button." + e.toString());
+                        }
+                    }
+                }
+            });
+            BLbutton.setOnClickListener(new View.OnClickListener(){
+                @Override
+                public void onClick(View v) {
+
+                    if (getState() == State.RESPOND) {
+                        try {
+                            Log.e(TAG, "button 3");
+                            String strMsg = "reply" + BLbutton.getText().toString() + ",";
+                            ByteBuffer msg = ByteBuffer.allocate(strMsg.getBytes().length);
+                            msg.put(strMsg.getBytes());
+                            msg.flip();
+                            pipe.sink().write(msg);
+                            onRunStateChanged(null, State.RESPOND);
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error clicking button." + e.toString());
+                        }
+                    }
+                }
+            });
+            BRbutton.setOnClickListener(new View.OnClickListener(){
+                @Override
+                public void onClick(View v) {
+
+                    if(getState() == State.RESPOND) {
+                        try {
+                            Log.e(TAG, "button 4");
+                            String strMsg = "reply" + BRbutton.getText().toString() + ",";
+                            ByteBuffer msg = ByteBuffer.allocate(strMsg.getBytes().length);
+                            msg.put(strMsg.getBytes());
+                            msg.flip();
+                            pipe.sink().write(msg);
+                            onRunStateChanged(null, State.RESPOND);
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error clicking button." + e.toString());
+                        }
+                    }
+                }
+            });
+        } catch (Exception e){
+            Log.e(TAG,"Error initializing buttons." + e.toString());
+        }
+    }
+
     private void initCamView(){
+        final IRClient client = this;
+        if(texView.isAvailable()){
+            Log.d(TAG, "true");
+        }
         texView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
             @Override
             public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
@@ -134,8 +285,13 @@ public class IRClient extends AppCompatActivity {
                     cam.setPreviewTexture(surface);
                     cam.startPreview();
 
-                    new IRClient_NetTask().execute();
-                    while(!IRClient_NetTask.ready){}
+                    pipe = Pipe.open();
+                    pipe.source().configureBlocking(false);
+                    pipe.sink().configureBlocking(false);
+                    new IRClient_NetTask().execute(client);
+
+                    toast = Toast.makeText(context, "Connecting...", Toast.LENGTH_SHORT);
+                    toast.show();
                 } catch (Exception e){
                     Log.e(TAG, "Error initializing recorder: " + e.toString());
                 }
@@ -169,16 +325,9 @@ public class IRClient extends AppCompatActivity {
         Camera.Parameters param = cam.getParameters();
         param.setPreviewSize(width, height);
         Log.e(TAG, "Picture format " + param.getPreviewFormat());
+
         cam.setParameters(param);
-        cam.setPreviewCallback(new Camera.PreviewCallback() {
-            @Override
-            public void onPreviewFrame(byte[] bytes, Camera camera) {
-                if (!frameInUse) {
-                    IRClient_NetTask.sendTime.add(System.currentTimeMillis());
-                    frame = bytes;
-                }
-            }
-        });
+        cam.setPreviewCallback(framePasser);
     }
 
     private void initRecorder(String fname){
@@ -284,5 +433,59 @@ public class IRClient extends AppCompatActivity {
             cam.setPreviewCallback(null);
             cam.release();
         }
+    }
+
+    public synchronized void onRunStateChanged(final String msg, State state){
+        if(msg != null) {
+            Log.d(TAG, msg);
+
+            Runnable show_toast = new Runnable() {
+                public void run() {
+                    toast = Toast.makeText(context, msg, Toast.LENGTH_LONG);
+                    toast.show();
+                }
+            };
+
+            this.runOnUiThread(show_toast);
+        }
+
+        if(state == State.FAILURE){
+            Log.e(TAG, "Failure, exiting.");
+            sleep(1000);
+            finish();
+        }
+
+        if(state == State.RESPOND){
+            if(RunState == State.RESPOND){
+                Log.d(TAG, "Resuming classification mode");
+                TRbutton.setVisibility(View.INVISIBLE);
+                TLbutton.setVisibility(View.INVISIBLE);
+                BRbutton.setVisibility(View.INVISIBLE);
+                BLbutton.setVisibility(View.INVISIBLE);
+                cam.setPreviewCallback(framePasser);
+                cam.startPreview();
+                state = State.CLASSIFY;
+            } else {
+                cam.stopPreview();
+                Log.d(TAG, "Waiting for response");
+            }
+        }
+
+        RunState = state;
+    }
+
+    /*
+    public static void updateView(final String msg){
+        Runnable update_view = new Runnable() {
+            public void run() {
+                IRClient.overlayView.setRectList(msg);
+            }
+        };
+        runOnUiThread(update_view);
+    }
+    */
+
+    public static State getState(){
+        return RunState;
     }
 }

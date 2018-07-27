@@ -8,16 +8,21 @@ import android.graphics.Rect;
 import android.util.Log;
 import android.view.View;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.concurrent.locks.ReentrantLock;
+
+import static sbu.irclient.IRClient.BLbutton;
+import static sbu.irclient.IRClient.rec;
 
 public class IRView extends View {
     ReentrantLock writing = new ReentrantLock();
-    private ArrayList<Rect> rects = new ArrayList<Rect>();
+    private ArrayList<ObjRect> rects = new ArrayList<ObjRect>();
     ArrayList<MaskPoint> pts = new ArrayList<MaskPoint>();
     private Paint brush;
     private int lineWidth = 2;
     private int lineColor = Color.GREEN;
     private int maskSize;
+    private Rect highlightedRect;
 
     public IRView(Context context) {
         super(context);
@@ -29,233 +34,323 @@ public class IRView extends View {
     }
 
     public void setRectList(String buf){
-        writing.lock();
-        rects.clear();
-        writing.unlock();
+        //Log.d(IRClient.TAG, "setting rect list");
+        try {
+            writing.lock();
+            rects.clear();
+            writing.unlock();
 
-        int i = 0;
-        int x, y, w, h, iNext;
-        while(i < buf.length() - 13) {
-            if (buf.charAt(i) == 'R') {
-                break;
+            int i = 0;
+            int x, y, w, h, iNext;
+            while (i < buf.length() - 13) {
+                if (buf.charAt(i) == 'R') {
+                    break;
+                }
+
+                iNext = nextComma(buf, i);
+                y = Integer.parseInt(buf.substring(i, iNext));
+                y = y * this.getHeight() / 640;
+                //Log.d(IRClient.TAG, Integer.toString(x) + " ");
+                i = iNext + 1;
+
+                iNext = nextComma(buf, i);
+                x = Integer.parseInt(buf.substring(i, iNext));
+                x = x * this.getWidth() / 480;
+                //Log.d(IRClient.TAG, Integer.toString(y) + " ");
+                i = iNext + 1;
+
+                iNext = nextComma(buf, i);
+                h = Integer.parseInt(buf.substring(i, iNext));
+                h = h * this.getHeight() / 640;
+                //Log.d(IRClient.TAG, Integer.toString(w) + " ");
+                i = iNext + 1;
+
+                iNext = nextComma(buf, i);
+                w = Integer.parseInt(buf.substring(i, iNext));
+                w = w * this.getWidth() / 480;
+                //Log.d(IRClient.TAG, Integer.toString(h) + " ");
+                i = iNext + 1;
+
+                iNext = nextComma(buf, i);
+                String guess1 = buf.substring(i, iNext);
+                //Log.d(IRClient.TAG, guess1 + " ");
+                i = iNext + 1;
+
+                iNext = nextComma(buf, i);
+                String guess2 = buf.substring(i, iNext);
+                //Log.d(IRClient.TAG, guess2 + " ");
+                i = iNext + 1;
+
+                iNext = nextComma(buf, i);
+                String guess3 = buf.substring(i, iNext);
+                //Log.d(IRClient.TAG, guess3 + " ");
+                i = iNext + 1;
+
+                if (rects.size() < 100) {
+                    writing.lock();
+                    ObjRect newRect = new ObjRect();
+                    newRect.setRect(new Rect(this.getWidth() - (x + w), y, this.getWidth() - x, y + h));
+                    newRect.setGuess1(guess1);
+                    newRect.setGuess2(guess2);
+                    newRect.setGuess3(guess3);
+                    rects.add(newRect);
+                    writing.unlock();
+                }
             }
+            invalidate();
+        } catch (Exception e) {
+            Log.e(IRClient.TAG, "Error setting rect list. " + e.toString());
+        }
+    }
 
-            iNext = nextComma(buf, i);
-            y = Integer.parseInt(buf.substring(i, iNext));
-            y = y * this.getHeight() / 640;
-            //Log.d(IRClient.TAG, Integer.toString(x) + " ");
-            i = iNext + 1;
+    public boolean setButtons(int x, int y){
+        highlightedRect = null;
+        for(ObjRect rect : rects){
+            if(rect.getRect().contains(x, y)){
+                highlightedRect = rect.getRect();
+                IRClient.TLbutton.setText(rect.getGuess1());
+                IRClient.TRbutton.setText(rect.getGuess2());
+                BLbutton.setText(rect.getGuess3());
+                IRClient.BRbutton.setText("Other");
 
-            iNext = nextComma(buf, i);
-            x = Integer.parseInt(buf.substring(i, iNext));
-            x = x * this.getWidth() / 480;
-            //Log.d(IRClient.TAG, Integer.toString(y) + " ");
-            i = iNext + 1;
+                IRClient.TRbutton.setVisibility(View.VISIBLE);
+                IRClient.TLbutton.setVisibility(View.VISIBLE);
+                IRClient.BRbutton.setVisibility(View.VISIBLE);
+                IRClient.BLbutton.setVisibility(View.VISIBLE);
 
-            iNext = nextComma(buf, i);
-            h = Integer.parseInt(buf.substring(i, iNext));
-            h = h * this.getHeight() / 640;
-            //Log.d(IRClient.TAG, Integer.toString(w) + " ");
-            i = iNext + 1;
-
-            iNext = nextComma(buf, i);
-            w = Integer.parseInt(buf.substring(i, iNext));
-            w = w * this.getWidth() / 480;
-            //Log.d(IRClient.TAG, Integer.toString(h) + " ");
-            i = iNext + 1;
-
-            if (rects.size() < 100) {
-                writing.lock();
-                rects.add(new Rect(this.getWidth() - (x + w), y, this.getWidth() - x, y + h));
-                writing.unlock();
+                return true;
             }
         }
-        invalidate();
+        return false;
     }
 
     private int isConnected(float[] bitMask, int index, int rowLen, MaskPoint pt){
         int y = index / rowLen;
         int x = index % rowLen;
 
+        // check if points are in same row
+        if(pt.y == y){
+            return -1;
+        }
+
+        // check if index is disconnected from anchor
         if(pt.x - x <= 0) {
-            if(pt.x - x < -1){
-                return -1;
+            // check if '1' sequence extending from anchor reaches current index
+            // excluding end of sequence (another anchor)
+            for (int i = 1; pt.x + i < x; i += 1) {
+                if (bitMask[index + rowLen + i] <= 0 || bitMask[index + rowLen + i + 1] == 0) {
+                    return -1;
+                }
             }
         } else {
+            // check if '1' sequence extending from current index reaches anchor
+            // excluding end of sequence (next index)
+            boolean connected = true;
             for (int i = 1; x + i < pt.x - 1; i += 1) {
-                if (bitMask[index + i] <= 0) {
-                    return -1;
+                if (bitMask[index + i] <= 0 || bitMask[index + i + 1] == 0) {
+                    connected = false;
+                }
+            }
+            // check if '1' sequence extending left from anchor reaches index
+            if(!connected){
+                for (int i = 0; i + x < pt.x; i++) {
+                    if (bitMask[index + rowLen + i] <= 0) {
+                        return -1;
+                    }
                 }
             }
         }
 
+        // find and return end of '1' sequence
         for(int i = 1; i + x < rowLen; i+=1) {
             if(bitMask[index + i] != 1){
                 return index + i -1;
             }
+
         }
         return index - x + rowLen - 1;
     }
 
-    public void setContoursFromBitMask(float[] bitMask){
+    public void setContoursFromBitMask(String recvMsg){
+        Log.d(IRClient.TAG, "setting bitmask");
+
         writing.lock();
         pts.clear();
         writing.unlock();
 
-        int rowLen = (int)Math.sqrt(bitMask.length);
-        //Log.e(IRClient.TAG, Integer.toString(rowLen));
-        ArrayList<MaskPoint> currPts = new ArrayList<MaskPoint>();
+        BitMask mask = new BitMask(recvMsg);
+        maskSize = mask.getLength();
 
+        try {
 
-        // loop through bitmask one row at a time
-        for (int i = bitMask.length - 1 - rowLen; i >= 0; i-= rowLen){
-
-            // clear old unconnected points from point list
-            for(int ptI = 0; ptI < currPts.size(); ptI++){
-                if(currPts.get(ptI).y > ((i + 1)/rowLen) + 1){
-                    MaskPoint pt1 = currPts.get(ptI);
-                    int add = 0;
-                    if(ptI + 1 < currPts.size()) {
-                        MaskPoint pt2 = currPts.get(ptI + 1);
-                        if (pt1.lPt == null && pt2.rPt == null && pt1.y == pt2.y) {
-                            Log.d(IRClient.TAG, "box top");
-                            pt1.lPt = pt2;
-                            pt2.rPt = pt1;
-
-                            pts.add(pt2);
-                            currPts.remove(ptI + 1);
-                            add++;
-                        }
+            // find first point
+            MaskPoint startPoint = null;
+            for (int lineNum = 0; lineNum < mask.getLength(); lineNum++) {
+                int line[] = mask.getLine(lineNum);
+                int xCoord = 0;
+                for (int item = 0; item < line.length; item += 2) {
+                    if (line[item] == 1) {
+                        startPoint = new MaskPoint(xCoord, lineNum, line[item + 1], item);
+                        item = line.length - 2;
+                        lineNum = mask.getLength();
                     }
-                    pts.add(pt1);
-                    currPts.remove(ptI);
-                    ptI += add;
+
+                    //Log.d(IRClient.TAG, "1");
+                    xCoord += line[item + 1];
                 }
             }
 
-            // loop through each element in row
-            for (int j = i; j < i + rowLen; j++) {
-                boolean pointFound = false;
+            if (startPoint == null) {
+                Log.d(IRClient.TAG, "No points found");
+                invalidate();
+                return;
+            }
 
-                // check if the bit is marked as masking an object (set to 1)
-                if (bitMask[j] > 0) {
-                    // create new points
-                    MaskPoint newPtA = new MaskPoint(j % rowLen, j/rowLen);
+            //Log.d(IRClient.TAG, "startpoint: " + Integer.toString(startPoint.x) + " " + Integer.toString(startPoint.y));
 
-                    //check if bit is 'connected' to previous points
-                    for(int ptI = 0; ptI < currPts.size(); ptI++){
-                        //Log.d(IRClient.TAG, "checking point " + Integer.toString(ptI));
-                        MaskPoint currPt = currPts.get(ptI);
-                        int nextPt = isConnected(bitMask, j, rowLen, currPt);
+            // wrap around the bitmask finding the next point
+            MaskPoint currPoint = startPoint;
+            MaskPoint nextPoint = null;
+            int lineNum = (int) startPoint.x + 1;
+            int direction = 1;
+            int prevDir = direction;
+            do {
+                //Log.d(IRClient.TAG, "loop top");
+                int line[] = mask.getLine(lineNum);
 
-                        //Log.d(IRClient.TAG, "Check point x,y: " + Float.toString(currPt.x) + " " + Float.toString(currPt.y));
-                        //Log.d(IRClient.TAG, "Curr point x,y: " + Float.toString(newPtA.x) + " " + Float.toString(newPtA.y));
-                        //Log.d(IRClient.TAG, "Next point x,y: " + Integer.toString(nextPt%rowLen) + " " + Integer.toString(nextPt/rowLen));
+                int xCoord = 0;
+                int missCount = 0;
+                boolean found = false;
+                for (int item = 0; item < line.length; item += 2) {
+                    if (line[item] == 1) {
+                        int xCoord2 = xCoord + line[item + 1] - 1;
+                        if (    ((xCoord == currPoint.x) ||
+                                 (xCoord2 == currPoint.x && lineNum == currPoint.y)) &&
+                                !currPoint.isConnected(xCoord, lineNum)) {
+                            //Log.d(IRClient.TAG, "Connecting " + Integer.toString(currPoint.x) + "," + Integer.toString(currPoint.y) + " to " + Integer.toString(xCoord) + ", " + Integer.toString(lineNum));
+                            MaskPoint newPt = new MaskPoint(xCoord, lineNum, line[item + 1], item);
+                            currPoint.connections.add(newPt);
+                            newPt.connections.add(currPoint);
+                            pts.add(currPoint);
+                            currPoint = newPt;
+                            found = true;
+                            missCount = 0;
 
-                        // if connected add the appropriate references
-                        if(nextPt != -1){
-                            pointFound = true;
+                            item = line.length - 2;
+                        } else if ( ((xCoord2 == currPoint.x) ||
+                                    (lineNum == currPoint.y && xCoord == currPoint.x)) &&
+                                    !currPoint.isConnected(xCoord2, lineNum)) {
+                            //Log.d(IRClient.TAG, "Connecting " + Integer.toString(currPoint.x) + "," + Integer.toString(currPoint.y) + " to " + Integer.toString(xCoord2) + ", " + Integer.toString(lineNum));
+                            MaskPoint newPt = new MaskPoint(xCoord2, lineNum, 1, item);
+                            currPoint.connections.add(newPt);
+                            newPt.connections.add(currPoint);
+                            pts.add(currPoint);
+                            currPoint = newPt;
+                            found = true;
+                            missCount = 0;
 
-                            // move the old connected point into the point list
-                            pts.add(currPt);
-                            currPts.remove(currPt);
-                            ptI--;
+                            item = line.length - 2;
+                        } else if ((currPoint.x > xCoord && currPoint.x < xCoord2) &&
+                                    !currPoint.isConnected(currPoint.x, lineNum)){
+                            //Log.d(IRClient.TAG, "Connecting " + Integer.toString(currPoint.x) + "," + Integer.toString(currPoint.y) + " to " + Integer.toString(currPoint.x) + ", " + Integer.toString(lineNum));
+                            MaskPoint newPtA = new MaskPoint(currPoint.x, lineNum, xCoord2 - currPoint.x + 1, item);
+                            currPoint.connections.add(newPtA);
+                            newPtA.connections.add(currPoint);
 
-                            // handle degenerate cases
-                            boolean rtPtFound = false;
-                            if(nextPt != j) {
-                                rtPtFound = true;
-                                j = nextPt - 1;
-                            }
-
-
-                            //// add appropriate references
-
-                            // check point connects to current index and next item
-                            if(currPt.rPt == null && currPt.lPt == null) {
-                                //Log.d(IRClient.TAG, "Adding left and right points");
-
-                                currPt.lPt = newPtA;
-                                newPtA.rPt = currPt;
-                                currPts.add(newPtA);
-
-                                if(rtPtFound) {
-                                    MaskPoint newPtB = new MaskPoint(nextPt % rowLen, nextPt / rowLen);
-                                    currPt.rPt = newPtB;
-                                    newPtB.lPt = currPt;
-                                    currPts.add(newPtB);
-                                } else {
-                                    // handle degenerate case
-                                    currPt.rPt = newPtA;
+                            MaskPoint newPtB = null;
+                            if(direction == 1){
+                                if(currPoint.index > 1) {
+                                    int newXCoord = currPoint.x - mask.getLine(currPoint.y)[currPoint.index - 1] - 1;
+                                    if(newXCoord > xCoord){
+                                        newPtB = new MaskPoint(newXCoord, lineNum, newXCoord - xCoord + 1, item);
+                                        direction *= -1;
+                                    }
                                 }
-                            } else if(currPt.lPt == null){
-                                //Log.d(IRClient.TAG, "Adding left point");
-                                currPt.lPt = newPtA;
-                                newPtA.rPt = currPt;
-                                currPts.add(newPtA);
-                            } else if(currPt.rPt == null) {
-                                //Log.d(IRClient.TAG, "Adding right point");
-                                currPt.rPt = newPtA;
-                                newPtA.lPt = currPt;
-                                currPts.add(newPtA);
+                                if(newPtB == null){
+                                    newPtB = new MaskPoint(xCoord, lineNum, line[item + 1], item);
+                                }
+                            } else {
+                                if(currPoint.index < mask.getLine(currPoint.y).length - 2){
+                                    int newXCoord = currPoint.x + currPoint.runLength + mask.getLine(currPoint.y)[currPoint.index + 3];
+                                    if(newXCoord < xCoord2) {
+                                        newPtB = new MaskPoint(newXCoord, lineNum, xCoord2 - newXCoord + 1, item);
+                                        direction *= -1;
+                                    }
+                                }
+                                if (newPtB == null){
+                                    newPtB = new MaskPoint(xCoord2, lineNum, 1, item);
+                                }
                             }
+                            //Log.d(IRClient.TAG, "Connecting " + Integer.toString(newPtA.x) + "," + Integer.toString(newPtA.y) + " to " + Integer.toString(newPtB.x) + ", " + Integer.toString(newPtB.y));
+                            newPtA.connections.add(newPtB);
+                            newPtB.connections.add(newPtA);
+                            pts.add(currPoint);
+                            pts.add(newPtA);
 
-                            ptI = currPts.size() + 1;
+                            currPoint = newPtB;
+                            found = true;
+                            missCount = 0;
+
+                            item = line.length - 2;
+                        } else if((currPoint.x < xCoord && currPoint.x + currPoint.runLength - 1 > xCoord2) &&
+                                !currPoint.isConnected(currPoint.x, lineNum)){
+                            //Log.d(IRClient.TAG, "Connecting " + Integer.toString(currPoint.x) + "," + Integer.toString(currPoint.y) + " to " + Integer.toString(xCoord) + ", " + Integer.toString(currPoint.y));
+                            MaskPoint newPtA = new MaskPoint(xCoord, currPoint.y, currPoint.runLength - (xCoord - currPoint.x), currPoint.index);
+                            newPtA.connections.add(currPoint);
+                            currPoint.connections.add(newPtA);
+
+                            //Log.d(IRClient.TAG, "Connecting " + Integer.toString(newPtA.x) + "," + Integer.toString(newPtA.y) + " to " + Integer.toString(xCoord) + ", " + Integer.toString(lineNum));
+                            MaskPoint newPtB = new MaskPoint(xCoord, lineNum, line[item + 1], item);
+                            newPtB.connections.add(newPtA);
+                            newPtA.connections.add(newPtB);
+
+                            pts.add(currPoint);
+                            pts.add(newPtA);
+
+                            currPoint = newPtB;
+                            found = true;
+                            missCount = 0;
+
+                            item = line.length - 2;
                         }
                     }
 
-                    if(!pointFound){
-                        currPts.add(newPtA);
+                    //Log.d(IRClient.TAG, "3");
+                    xCoord += line[item + 1];
+                }
 
-
-                        //Log.d(IRClient.TAG, "NewPtA x,y: " + Float.toString(newPtA.x) + " " + Float.toString(newPtA.y));
-                        int nextPt = j;
-                        while( nextPt < i + rowLen - 1 && bitMask[nextPt+1] > 0){
-                            nextPt++;
-                        }
-
-                        if (nextPt != j){
-                            MaskPoint newPtB = new MaskPoint(nextPt%rowLen, nextPt/rowLen);
-                            //Log.d(IRClient.TAG, "NewPtB x,y: " + Float.toString(newPtB.x) + " " + Float.toString(newPtB.y));
-                            currPts.add(newPtB);
-
-                            newPtA.rPt = newPtB;
-                            newPtB.lPt = newPtA;
-                        }
-                        j = nextPt;
+                if (!found) {
+                    //Log.d(IRClient.TAG, "not found");
+                    missCount++;
+                    if (direction == 0) {
+                        direction -= prevDir;
+                    } else {
+                        prevDir = direction;
+                        direction = 0;
+                    }
+                    if (missCount > 3) {
+                        invalidate();
+                        return;
                     }
                 }
 
-            }
+                lineNum += direction;
+                //Log.d(IRClient.TAG, "startpoint: " + Integer.toString(startPoint.x) + " " + Integer.toString(startPoint.y));
+                //Log.d(IRClient.TAG, "currpoint: " + Integer.toString(currPoint.x) + " " + Integer.toString(currPoint.y));
+            } while (!(currPoint.x == startPoint.x && currPoint.y == startPoint.y) && pts.size() < 150);
+        } catch (Exception e){
+            Log.d(IRClient.TAG, "failed to read mask. " + e.toString());
         }
 
-        // add any remaining points to the point list
-        for(int ptI = 0; ptI < currPts.size() - 1; ptI++){
-            MaskPoint pt1 = currPts.get(ptI);
-            MaskPoint pt2 = currPts.get(ptI + 1);
-            if(pt1.rPt == null && pt2.lPt == null){
-                pt1.rPt = pt2;
-                pt2.lPt = pt1;
-
-                pts.add(pt1);
-                pts.add(pt2);
-                ptI++;
-            } else if(pt1.lPt == null && pt2.rPt == null){
-                pt1.lPt = pt2;
-                pt2.rPt = pt1;
-
-                pts.add(pt1);
-                pts.add(pt2);
-                ptI++;
-            }
-        }
-        Log.d(IRClient.TAG, "pts has " + Integer.toString(pts.size()) + " pts");
-        maskSize = rowLen;
+        //Log.d(IRClient.TAG, "pts has " + Integer.toString(pts.size()) + " pts");
         invalidate();
     }
 
     public void clear(){
+        writing.lock();
         rects.clear();
+        writing.unlock();
+
         invalidate();
     }
 
@@ -268,25 +363,36 @@ public class IRView extends View {
 
     @Override
     protected void onDraw(Canvas canvas){
-        //Log.d(IRClient.TAG, "Drawing rects 0-" + Integer.toString(rects.size()));
 
+        //Log.d(IRClient.TAG, "drawing");
         writing.lock();
-        //for(Rect rect : rects){
-        //    canvas.drawRect(rect, brush);
-        //}
 
+        /*
+        //Log.d(IRClient.TAG, "Drawing rects 0-" + Integer.toString(rects.size()));
+        if(IRClient.getState() == IRClient.State.RESPOND) {
+            if(highlightedRect != null) {
+                canvas.drawRect(highlightedRect, brush);
+            }
+        } else {
+            for (ObjRect rect : rects) {
+                canvas.drawRect(rect.getRect(), brush);
+            }
+        }
+        */
+
+        // Draw Using Mask Points
         if(pts.size() > 0 && maskSize > 0) {
             float xRatio = canvas.getWidth() / maskSize;
             float yRatio = canvas.getHeight() / maskSize;
             for (MaskPoint point : pts) {
                 //Log.d(IRClient.TAG, "ptA x: " + Float.toString(point.x * xRatio) + " y " + Float.toString(point.y * yRatio));
-                if(point.lPt != null) {
-                    //Log.d(IRClient.TAG, "ptB x: " + Float.toString(point.lPt.x * xRatio) + " y " + Float.toString(point.lPt.y * yRatio));
-                    canvas.drawLine(point.x * xRatio, point.y * yRatio, point.lPt.x * xRatio, point.lPt.y * yRatio, brush);
+                for(MaskPoint conn: point.connections) {
+                    canvas.drawLine(point.x * xRatio, point.y * yRatio, conn.x * xRatio, conn.y * yRatio, brush);
                 }
                 //canvas.drawLine(point.x * xRatio, point.y * yRatio, point.rPt.x * xRatio, point.rPt.y * yRatio, brush);
             }
         }
+
         writing.unlock();
     }
 }
