@@ -2,7 +2,7 @@
 # requests. Runs as a daemon, listening for incoming requests
 # and dispatching them to threads for training or classification.
 
-import os, sys, time, socket, select, threading, Boxify
+import os, sys, time, socket, select, threading, requests, Boxify
 from datetime import datetime
 from daemon import Daemon
 from random import *
@@ -18,6 +18,7 @@ IR_REQ_SS = 'Slideshow'
 IR_READY = "Ready"
 CURR_FILE_ID = 0
 SERVER_IP = '0.0.0.0'
+GPU_SERV_ADDR = "http://74.96.226.107:8000/api/classify"
 
 class IRDispatcher(Daemon):
 
@@ -283,8 +284,6 @@ def slideshow_thread(conn, filepath):
     f = open(filepath, 'wb')
     fRead = open(filepath, "rb")
 
-    classes = ["Fish", "Car", "Stick", "Hand", "Florida", "Pepper"]
-
     try:
         conn.sendall(IR_READY)
         byteArray = ""
@@ -302,34 +301,18 @@ def slideshow_thread(conn, filepath):
                 
                 frame = byteArray[:460800]
                 byteArray = byteArray[460800:]
+
                 frame = np.frombuffer(frame, dtype=np.uint8)
                 frame = np.reshape(frame, (h*3/2, w))
 
                 RGBMatrix = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_NV21)
 
-                rectCount = 0
-                #for tuple in relay_frame_classify_req(RGBMatrix):
-                #    if tuple[2]*tuple[3] > 300 and rectCount < 50:
-                #        conn.sendall(str(tuple[0]) + "," + str(tuple[1]) + "," + str(tuple[2]) + "," + str(tuple[3]) + "," + classes[randint(0, len(classes) - 1)] + "," + classes[randint(0, len(classes) - 1)] + "," + classes[randint(0, len(classes) - 1)] + ",")
-                #        rectCount += 1
-
-                for i in range(4):
-                    conn.sendall("0,19,-")
-
-                conn.sendall("0,4,1,2,0,2,1,7,0,4,-")
-                conn.sendall("0,4,1,2,0,2,1,7,0,4,-")
-                conn.sendall("0,4,1,2,0,2,1,7,0,4,-")
-                conn.sendall("0,4,1,2,0,2,1,7,0,4,-")
-
-                for i in range(11):
-                    conn.sendall("0,4,1,11,0,4,-")
-
-                for i in range(4):
-                    conn.sendall("0,19,-")
-
                 #cv2.imshow('frame', RGBMatrix)
                 #if cv2.waitKey(1) & 0xFF == ord('q'):
                 #    break
+
+                #for guess in relay_classify_req(RGBMatrix):
+                conn.sendall("malamute,grand piano,bicycle,")
                 
                 conn.sendall("RECEIVED")
 
@@ -366,9 +349,24 @@ def train_thread(conn, filepath):
 
 # pass an image to a classifier
 # implementation will differ
-def relay_classify_req(filepath):
-    # NULL Method
-    return None
+def relay_classify_req(img):
+    ret, jpg = cv2.imencode(".jpg", img)
+    responses = list()
+
+    try:
+        r = requests.post(GPU_SERV_ADDR, jpg.tostring())
+        if r.status_code == 200:
+            data = r.json()
+    
+            for i in range(min(len(data), 3)):
+                endPt = data[i]['label'].find(",")
+                if endPt == -1:
+                    endPt = len(data[i]['label'])
+
+                responses.append(data[i]['label'][10:endPt])
+    except Exception as e:
+        print(e)
+    return responses
 
 def YUVtoRGB(filename):
     w = 640
