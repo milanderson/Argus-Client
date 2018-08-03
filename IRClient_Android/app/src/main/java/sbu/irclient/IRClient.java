@@ -1,6 +1,7 @@
 package sbu.irclient;
 
 import android.Manifest;
+import android.app.Activity;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
@@ -14,11 +15,15 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
@@ -31,7 +36,7 @@ import java.util.concurrent.Callable;
 
 import static android.os.SystemClock.sleep;
 
-public class IRClient extends AppCompatActivity {
+public class IRClient extends Activity {
     public static final String TAG = "IRClient";
     public enum State {FAILURE, RESPOND, CLASSIFY, IDENTIFY}
     private static State RunState = State.CLASSIFY;
@@ -49,11 +54,33 @@ public class IRClient extends AppCompatActivity {
     public static IRView overlayView;
     private TextureView texView;
     public static Button TLbutton, TRbutton, BRbutton, BLbutton;
+    public static ClassInputBar classInputBar;
     private Toast toast;
     public static Context context;
     private Camera cam;
 
     private int permGranted = 0;
+
+    private TextView.OnEditorActionListener enterClassListener = new TextView.OnEditorActionListener() {
+        @Override
+        public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+            InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+            imm.hideSoftInputFromWindow(classInputBar.getWindowToken(), 0);
+
+            try {
+                String strMsg = "reply" + classInputBar.getText().toString() + ",";
+                ByteBuffer msg = ByteBuffer.allocate(strMsg.getBytes().length);
+                msg.put(strMsg.getBytes());
+                msg.flip();
+                pipe.sink().write(msg);
+            } catch (Exception e){
+                Log.e(TAG, "Error passing reply." + e.toString());
+            }
+            classInputBar.setText("");
+            onRunStateChanged(null, State.RESPOND);
+            return true;
+        }
+    };
 
     private Camera.PreviewCallback framePasser = new Camera.PreviewCallback() {
         @Override
@@ -90,8 +117,10 @@ public class IRClient extends AppCompatActivity {
             return;
         }
 
+        RunState = State.CLASSIFY;
         initViews();
         initButtons();
+        initInputBar();
 
         Log.d(TAG, "init Cam");
         //checkCapabilities();
@@ -172,11 +201,12 @@ public class IRClient extends AppCompatActivity {
     private void initViews(){
         setContentView(R.layout.activity_irclient);
         texView = findViewById(R.id.textureView);
+
         overlayView = new IRView(this);
         overlayView.setOnTouchListener(new View.OnTouchListener() {
             @Override
             public boolean onTouch(View view, MotionEvent motionEvent) {
-                if(overlayView.setButtons((int)motionEvent.getX(), (int)motionEvent.getY())) {
+                if(getState() == State.CLASSIFY && overlayView.setButtons((int)motionEvent.getX(), (int)motionEvent.getY())) {
                     onRunStateChanged(null, State.RESPOND);
                 }
                 return false;
@@ -192,21 +222,34 @@ public class IRClient extends AppCompatActivity {
             BLbutton = findViewById(R.id.buttonBL);
             BRbutton = findViewById(R.id.buttonBR);
 
+            overlayView.setGuesses("");
+
             TLbutton.setOnClickListener(new View.OnClickListener(){
                 @Override
                 public void onClick(View v) {
-                    if(getState() == State.RESPOND) {
+                    if(getState() == State.RESPOND && TLbutton.getVisibility() == View.VISIBLE) {
                         try {
                             Log.e(TAG, "button 1");
+
+                            if(TLbutton.getText() == "Unknown"){
+                                classInputBar.setVisibility(View.VISIBLE);
+                                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                                imm.showSoftInput(classInputBar, InputMethodManager.SHOW_IMPLICIT);
+                                classInputBar.setOnEditorActionListener(enterClassListener);
+                                classInputBar.requestFocus();
+
+                                return;
+                            }
+
                             String strMsg = "reply" + TLbutton.getText().toString() + ",";
                             ByteBuffer msg = ByteBuffer.allocate(strMsg.getBytes().length);
                             msg.put(strMsg.getBytes());
                             msg.flip();
                             pipe.sink().write(msg);
-                            onRunStateChanged(null, State.RESPOND);
                         } catch (Exception e) {
                             Log.e(TAG, "Error clicking button." + e.toString());
                         }
+                        onRunStateChanged(null, State.RESPOND);
                     }
                 }
             });
@@ -214,18 +257,29 @@ public class IRClient extends AppCompatActivity {
                 @Override
                 public void onClick(View v) {
 
-                    if (getState() == State.RESPOND) {
+                    if (getState() == State.RESPOND && TRbutton.getVisibility() == View.VISIBLE) {
                         try {
                             Log.e(TAG, "button 2");
+
+                            if(TRbutton.getText() == "Other"){
+                                classInputBar.setVisibility(View.VISIBLE);
+                                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                                imm.showSoftInput(classInputBar, InputMethodManager.SHOW_IMPLICIT);
+                                classInputBar.setOnEditorActionListener(enterClassListener);
+                                classInputBar.requestFocus();
+
+                                return;
+                            }
+
                             String strMsg = "reply" + TRbutton.getText().toString() + ",";
                             ByteBuffer msg = ByteBuffer.allocate(strMsg.getBytes().length);
                             msg.put(strMsg.getBytes());
                             msg.flip();
                             pipe.sink().write(msg);
-                            onRunStateChanged(null, State.RESPOND);
                         } catch (Exception e) {
                             Log.e(TAG, "Error clicking button." + e.toString());
                         }
+                        onRunStateChanged(null, State.RESPOND);
                     }
                 }
             });
@@ -233,18 +287,29 @@ public class IRClient extends AppCompatActivity {
                 @Override
                 public void onClick(View v) {
 
-                    if (getState() == State.RESPOND) {
+                    if (getState() == State.RESPOND && BLbutton.getVisibility() == View.VISIBLE) {
                         try {
                             Log.e(TAG, "button 3");
+
+                            if(BLbutton.getText() == "Other"){
+                                classInputBar.setVisibility(View.VISIBLE);
+                                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                                imm.showSoftInput(classInputBar, InputMethodManager.SHOW_IMPLICIT);
+                                classInputBar.setOnEditorActionListener(enterClassListener);
+                                classInputBar.requestFocus();
+
+                                return;
+                            }
+
                             String strMsg = "reply" + BLbutton.getText().toString() + ",";
                             ByteBuffer msg = ByteBuffer.allocate(strMsg.getBytes().length);
                             msg.put(strMsg.getBytes());
                             msg.flip();
                             pipe.sink().write(msg);
-                            onRunStateChanged(null, State.RESPOND);
                         } catch (Exception e) {
                             Log.e(TAG, "Error clicking button." + e.toString());
                         }
+                        onRunStateChanged(null, State.RESPOND);
                     }
                 }
             });
@@ -252,24 +317,42 @@ public class IRClient extends AppCompatActivity {
                 @Override
                 public void onClick(View v) {
 
-                    if(getState() == State.RESPOND) {
+                    if(getState() == State.RESPOND && BRbutton.getVisibility() == View.VISIBLE) {
                         try {
                             Log.e(TAG, "button 4");
+
+                            if(BRbutton.getText() == "Other"){
+                                classInputBar.setVisibility(View.VISIBLE);
+                                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                                imm.showSoftInput(classInputBar, InputMethodManager.SHOW_IMPLICIT);
+                                classInputBar.setOnEditorActionListener(enterClassListener);
+                                classInputBar.requestFocus();
+
+                                return;
+                            }
+
                             String strMsg = "reply" + BRbutton.getText().toString() + ",";
                             ByteBuffer msg = ByteBuffer.allocate(strMsg.getBytes().length);
                             msg.put(strMsg.getBytes());
                             msg.flip();
                             pipe.sink().write(msg);
-                            onRunStateChanged(null, State.RESPOND);
                         } catch (Exception e) {
                             Log.e(TAG, "Error clicking button." + e.toString());
                         }
+                        onRunStateChanged(null, State.RESPOND);
                     }
                 }
             });
         } catch (Exception e){
             Log.e(TAG,"Error initializing buttons." + e.toString());
         }
+    }
+
+    private void initInputBar(){
+        classInputBar = findViewById(R.id.classInputBar);
+        classInputBar.setVisibility(View.INVISIBLE);
+
+        classInputBar.setOnEditorActionListener(enterClassListener);
     }
 
     private void initCamView(){
@@ -462,6 +545,7 @@ public class IRClient extends AppCompatActivity {
                 TLbutton.setVisibility(View.INVISIBLE);
                 BRbutton.setVisibility(View.INVISIBLE);
                 BLbutton.setVisibility(View.INVISIBLE);
+                classInputBar.setVisibility(View.INVISIBLE);
                 cam.setPreviewCallback(framePasser);
                 cam.startPreview();
                 state = State.CLASSIFY;
@@ -473,17 +557,6 @@ public class IRClient extends AppCompatActivity {
 
         RunState = state;
     }
-
-    /*
-    public static void updateView(final String msg){
-        Runnable update_view = new Runnable() {
-            public void run() {
-                IRClient.overlayView.setRectList(msg);
-            }
-        };
-        runOnUiThread(update_view);
-    }
-    */
 
     public static State getState(){
         return RunState;
