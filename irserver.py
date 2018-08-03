@@ -311,8 +311,8 @@ def slideshow_thread(conn, filepath):
                 #if cv2.waitKey(1) & 0xFF == ord('q'):
                 #    break
 
-                #for guess in relay_classify_req(RGBMatrix):
-                conn.sendall("malamute,grand piano,bicycle,")
+                for guess in relay_classify_req(RGBMatrix):
+                    conn.sendall(guess + ",")
                 
                 conn.sendall("RECEIVED")
 
