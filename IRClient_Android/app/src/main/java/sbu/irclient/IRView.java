@@ -104,24 +104,54 @@ public class IRView extends View {
     }
 
     public boolean setButtons(int x, int y){
+        /*
         highlightedRect = null;
         for(ObjRect rect : rects){
             if(rect.getRect().contains(x, y)){
                 highlightedRect = rect.getRect();
-                IRClient.TLbutton.setText(rect.getGuess1());
-                IRClient.TRbutton.setText(rect.getGuess2());
-                BLbutton.setText(rect.getGuess3());
-                IRClient.BRbutton.setText("Other");
+                if(rect.getGuess1().length() > 1) {
+                    IRClient.TLbutton.setText(rect.getGuess1());
+                } else {
+                    IRClient.TLbutton.setText("Unknown");
+                }
+                if(rect.getGuess2().length() > 1) {
+                    IRClient.TRbutton.setText(rect.getGuess2());
+                } else if(rect.getGuess1().length() > 1){
+                    IRClient.TRbutton.setText("Other");
+                } else {
+                    IRClient.TRbutton.setText("");
+                }
+                if(rect.getGuess3().length() > 1) {
+                    IRClient.BLbutton.setText(rect.getGuess3());
+                    IRClient.BRbutton.setText("Other");
+                } else if(rect.getGuess2().length() > 1){
+                    IRClient.BLbutton.setText("Other");
+                    IRClient.BRbutton.setText("");
+                } else {
+                    IRClient.BLbutton.setText("");
+                    IRClient.BRbutton.setText("");
+                }
+                */
 
-                IRClient.TRbutton.setVisibility(View.VISIBLE);
-                IRClient.TLbutton.setVisibility(View.VISIBLE);
-                IRClient.BRbutton.setVisibility(View.VISIBLE);
-                IRClient.BLbutton.setVisibility(View.VISIBLE);
+                if(IRClient.TLbutton.getText().length() > 1) {
+                    IRClient.TLbutton.setVisibility(View.VISIBLE);
+                }
+                if(IRClient.TRbutton.getText().length() > 1) {
+                    IRClient.TRbutton.setVisibility(View.VISIBLE);
+                }
+                if(IRClient.BRbutton.getText().length() > 1) {
+                    IRClient.BRbutton.setVisibility(View.VISIBLE);
+                }
+                if(IRClient.BLbutton.getText().length() > 1) {
+                    IRClient.BLbutton.setVisibility(View.VISIBLE);
+                }
 
                 return true;
+                /*
             }
         }
         return false;
+        */
     }
 
     private int isConnected(float[] bitMask, int index, int rowLen, MaskPoint pt){
@@ -346,6 +376,49 @@ public class IRView extends View {
         invalidate();
     }
 
+    public void setGuesses(String recvMsg){
+        int i = 0;
+        int iNext;
+
+        iNext = recvMsg.indexOf(",");
+        if(iNext == i || iNext == -1){
+            IRClient.TLbutton.setText("Unknown");
+            IRClient.TRbutton.setText("");
+            IRClient.BLbutton.setText("");
+            IRClient.BRbutton.setText("");
+            return;
+        } else {
+            IRClient.TLbutton.setText(recvMsg.substring(i, iNext));
+
+            i = iNext + 1;
+            iNext = recvMsg.indexOf(",", i);
+        }
+
+        if(iNext == i || iNext == -1){
+            IRClient.TRbutton.setText("Other");
+            IRClient.BLbutton.setText("");
+            IRClient.BRbutton.setText("");
+            return;
+        } else {
+            IRClient.TRbutton.setText(recvMsg.substring(i, iNext));
+            i = iNext + 1;
+            iNext = recvMsg.indexOf(",", i);
+        }
+
+        if(iNext == i || iNext == -1){
+            IRClient.BLbutton.setText("Other");
+            IRClient.BRbutton.setText("");
+            return;
+        } else {
+            IRClient.BLbutton.setText(recvMsg.substring(i, iNext));
+            IRClient.BRbutton.setText("Other");
+        }
+
+        return;
+
+
+    }
+
     public void clear(){
         writing.lock();
         rects.clear();
@@ -368,6 +441,7 @@ public class IRView extends View {
         writing.lock();
 
         /*
+        // Draw Using Bounding Boxes
         //Log.d(IRClient.TAG, "Drawing rects 0-" + Integer.toString(rects.size()));
         if(IRClient.getState() == IRClient.State.RESPOND) {
             if(highlightedRect != null) {
@@ -380,6 +454,7 @@ public class IRView extends View {
         }
         */
 
+        /*
         // Draw Using Mask Points
         if(pts.size() > 0 && maskSize > 0) {
             float xRatio = canvas.getWidth() / maskSize;
@@ -392,6 +467,7 @@ public class IRView extends View {
                 //canvas.drawLine(point.x * xRatio, point.y * yRatio, point.rPt.x * xRatio, point.rPt.y * yRatio, brush);
             }
         }
+        */
 
         writing.unlock();
     }
