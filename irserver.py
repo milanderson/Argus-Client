@@ -2,7 +2,7 @@
 # requests. Runs as a daemon, listening for incoming requests
 # and dispatching them to threads for training or classification.
 
-import os, sys, time, socket, select, threading, requests, Boxify
+import os, sys, re, time, socket, select, threading, requests, Boxify
 from datetime import datetime
 from daemon import Daemon
 from random import *
