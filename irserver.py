@@ -18,7 +18,9 @@ IR_REQ_SS = 'Slideshow'
 IR_READY = "Ready"
 CURR_FILE_ID = 0
 SERVER_IP = '0.0.0.0'
-GPU_SERV_ADDR = "http://74.96.226.107:8000/api/classify"
+GPU_SERV_CLASS_ADDR = "http://74.96.226.107:8000/api/classify"
+GPU_SERV_TRAIN_ADDR = "http://74.96.226.107:8000/api/classify"
+CLASSLIST = 'classlist.txt'
 
 class IRDispatcher(Daemon):
 
@@ -59,7 +61,16 @@ class IRDispatcher(Daemon):
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.bind((SERVER_IP, 50505))
             print(s.getsockname())
+	
+	    sReply = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	    sReply.bind((SERVER_IP, 50505))
+	    sReply.setblocking(0)
+	
             s.listen(3)
+	    sReply.listen(3)
+	    readList = [s, sReply]
+	
+	    connList = []
 
         except Exception as e:
             print("Socket failed to init.")
@@ -67,43 +78,57 @@ class IRDispatcher(Daemon):
             exit()
 
         while True:
-            try:
-                conn, addr = s.accept()
-                data = conn.recv(1024)
-                print(data)
-            except Exception as e:
-                print("Accept and connect failure.")
-                print(e)
-                continue
-
-            if IR_REQ_TR in data:
-                path = self.next_filename()
-                t = threading.Thread(target=train_thread, args=(conn, path))
-                t.start()
-            elif IR_REQ_CL in data:
-                path = self.next_filename()
-                t = threading.Thread(target=classify_thread, args=(conn, path))
-                t.start()
-            elif IR_REQ_ST in data:
-                path = self.next_filename('avi')
-                t = threading.Thread(target=stream_thread, args=(conn, path))
-                t.start()
-            elif IR_REQ_SS in data:
-                path = self.next_filename()
-                t = threading.Thread(target=slideshow_thread, args=(conn, path))
-                t.start()
-            elif IR_REQ_MP4ST in data:
-                path = self.next_filename()
-                t = threading.Thread(target=mp4stream_thread, args=(conn, path))
-                t.start()
-            else:
-                try:
-                    conn.sendall(REFUSE_IR_REQ)
-                    conn.close()
+	    readable, writable, errored = select.select(readList, [], [])
+		
+	    if sReply in readable:
+		try:
+                    path = self.next_filename()
+		    replyConn, addr = sReply.accept()
+		    t = threading.Thread(target=slideshow_thread, args=(conn, replyConn, path))
+                    t.start()
+		except Exception as e:
+		    print("Error accepting reply socket.")
+		    print(e)
+		    continue
+		
+            if s in readable:
+	        try:
+                    conn, addr = s.accept()
+                    data = conn.recv(1024)
+                    print(data)
                 except Exception as e:
-                    print("Refusing connection.")
+                    print("Accept and connect failure.")
                     print(e)
                     continue
+		
+                if IR_REQ_TR in data:
+                    path = self.next_filename()
+                    t = threading.Thread(target=train_thread, args=(conn, path))
+                    t.start()
+                elif IR_REQ_CL in data:
+                    path = self.next_filename()
+                    t = threading.Thread(target=classify_thread, args=(conn, path))
+                    t.start()
+                elif IR_REQ_ST in data:
+                    path = self.next_filename('avi')
+                    t = threading.Thread(target=stream_thread, args=(conn, path))
+                    t.start()
+                elif IR_REQ_SS in data:
+                    connList.append(conn)
+		    if len(connList) > 10:
+		        connList.pop(0).close()
+                elif IR_REQ_MP4ST in data:
+                    path = self.next_filename()
+                    t = threading.Thread(target=mp4stream_thread, args=(conn, path))
+                    t.start()
+                else:
+                    try:
+                        conn.sendall(REFUSE_IR_REQ)
+                        conn.close()
+                    except Exception as e:
+                        print("Refusing connection.")
+                        print(e)
+                        continue
 
 def mp4stream_thread(conn, filepath):
 
@@ -279,44 +304,74 @@ def classify_thread(conn, filepath):
     conn.close()
 
 # recieve and process a stream of YUV images
-def slideshow_thread(conn, filepath):
+def slideshow_thread(conn, replyConn, filepath):
     print("slideshow")
+    classListFile = open(CLASSLIST, "r")
+    classList = classListFile.readlines()
     f = open(filepath, 'wb')
     fRead = open(filepath, "rb")
+    readList =[conn, replyConn]
+    
+    w = 640
+    h = 480
 
     try:
         conn.sendall(IR_READY)
         byteArray = ""
         while True:
-            data = conn.recv(460800)
-            f.write(data)
-         
+	    readable, writable, errored = select.select(readList, [], [])
 
-            if len(byteArray) < 460800:
-                byteArray = byteArray + fRead.read(460800)
-            else:
-                print("full frame")
-                w = 640
-                h = 480
+	    if replyConn in readable:
+		data = replyConn.recv()
+		frameNum = data[0:4]
+		i = 4
+		while i < len(data) && data[i] != "^":
+		    i += 1
+		frameClass = data[4:i]
+		
+		match = None
+		class = 0
+		while match is not None && class < len(classList):
+		    match = re.search(frameClass classList[class], re.I)
+		    class += 1
+		if match is not None:
+    		    frameFile = open(filepath, "rb")
+		    frameFile.seek(int(frameNum)*460800)
+		    frame = frameFile.read(460800)
+
+		    frame = np.frombuffer(frame, dtype=np.uint8)
+                    frame = np.reshape(frame, (h*3/2, w))
+                    RGBMatrix = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_NV21)
+			
+		    relay_train_req(string(class).zfill(4), RGBMatrix)
+		    
+	
+	    if conn in readable:
+                data = conn.recv(460800)
+                f.write(data)
+
+                if len(byteArray) < 460800:
+                    byteArray = byteArray + fRead.read(460800)
+                else:
+                    print("full frame")
                 
-                frame = byteArray[:460800]
-                byteArray = byteArray[460800:]
+                    frame = byteArray[:460800]
+                    byteArray = byteArray[460800:]
 
-                frame = np.frombuffer(frame, dtype=np.uint8)
-                frame = np.reshape(frame, (h*3/2, w))
+                    frame = np.frombuffer(frame, dtype=np.uint8)
+                    frame = np.reshape(frame, (h*3/2, w))
 
-                RGBMatrix = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_NV21)
+                    RGBMatrix = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_NV21)
 
-                #cv2.imshow('frame', RGBMatrix)
-                #if cv2.waitKey(1) & 0xFF == ord('q'):
-                #    break
+                    #cv2.imshow('frame', RGBMatrix)
+                    #if cv2.waitKey(1) & 0xFF == ord('q'):
+                    #    break
 
-                for guess in relay_classify_req(RGBMatrix):
-                    conn.sendall(guess + ",")
-                
-                conn.sendall("RECEIVED")
-
-        f.close()
+                    for guess in relay_classify_req(RGBMatrix):
+                        conn.sendall(guess + ",")
+                    
+                    conn.sendall("RECEIVED")
+			
     except Exception as e:
         print("Error recieving image.")
         print(e)
@@ -354,7 +409,7 @@ def relay_classify_req(img):
     responses = list()
 
     try:
-        r = requests.post(GPU_SERV_ADDR, jpg.tostring())
+        r = requests.post(GPU_SERV_CLASS_ADDR, jpg.tostring())
         if r.status_code == 200:
             data = r.json()
     
@@ -367,6 +422,12 @@ def relay_classify_req(img):
     except Exception as e:
         print(e)
     return responses
+
+def relay_train_req(class, img):
+    ret, jpg = cv2.imencode(".jpg", img)
+    try:
+        r = requests.post(GPU_SERV_train_ADDR, class + jpg.tostring())
+	
 
 def YUVtoRGB(filename):
     w = 640
