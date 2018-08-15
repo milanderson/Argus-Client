@@ -19,7 +19,7 @@ IR_READY = "Ready"
 CURR_FILE_ID = 0
 SERVER_IP = '0.0.0.0'
 GPU_SERV_CLASS_ADDR = "http://74.96.226.107:8000/api/classify"
-GPU_SERV_TRAIN_ADDR = "http://74.96.226.107:8000/api/classify"
+GPU_SERV_TRAIN_ADDR = "http://74.96.226.107:8000/api/train"
 CLASSLIST = 'classlist.txt'
 
 class IRDispatcher(Daemon):
@@ -63,7 +63,7 @@ class IRDispatcher(Daemon):
             print(s.getsockname())
 	
 	    sReply = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	    sReply.bind((SERVER_IP, 50505))
+	    sReply.bind((SERVER_IP, 50506))
 	    sReply.setblocking(0)
 	
             s.listen(3)
@@ -325,15 +325,15 @@ def slideshow_thread(conn, replyConn, filepath):
 		data = replyConn.recv()
 		frameNum = data[0:4]
 		i = 4
-		while i < len(data) && data[i] != "^":
+		while i < len(data) and data[i] != "^":
 		    i += 1
 		frameClass = data[4:i]
 		
 		match = None
-		class = 0
-		while match is not None && class < len(classList):
-		    match = re.search(frameClass classList[class], re.I)
-		    class += 1
+		classNum = 0
+		while match is not None and classNum < len(classList):
+		    match = re.search(frameClass, classList[classNum], re.I)
+		    classNum += 1
 		if match is not None:
     		    frameFile = open(filepath, "rb")
 		    frameFile.seek(int(frameNum)*460800)
@@ -343,7 +343,7 @@ def slideshow_thread(conn, replyConn, filepath):
                     frame = np.reshape(frame, (h*3/2, w))
                     RGBMatrix = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_NV21)
 			
-		    relay_train_req(string(class).zfill(4), RGBMatrix)
+		    relay_train_req(string(classNum).zfill(4), RGBMatrix)
 		    
 	
 	    if conn in readable:
@@ -423,11 +423,12 @@ def relay_classify_req(img):
         print(e)
     return responses
 
-def relay_train_req(class, img):
+def relay_train_req(classNum, img):
     ret, jpg = cv2.imencode(".jpg", img)
     try:
-        r = requests.post(GPU_SERV_train_ADDR, class + jpg.tostring())
-	
+        r = requests.post(GPU_SERV_train_ADDR, classNum + jpg.tostring())
+    except Exception as e:
+	print(e)
 
 def YUVtoRGB(filename):
     w = 640
