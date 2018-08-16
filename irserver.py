@@ -311,6 +311,7 @@ def slideshow_thread(conn, replyConn, filepath):
     f = open(filepath, 'wb')
     fRead = open(filepath, "rb")
     readList =[conn, replyConn]
+    frameCount = 0
     
     w = 640
     h = 480
@@ -319,34 +320,38 @@ def slideshow_thread(conn, replyConn, filepath):
         conn.sendall(IR_READY)
         byteArray = ""
         while True:
-	    readable, writable, errored = select.select(readList, [], [])
+            readable, writable, errored = select.select(readList, [], [])
 
-	    if replyConn in readable:
-		data = replyConn.recv()
-		frameNum = data[0:4]
-		i = 4
-		while i < len(data) and data[i] != "^":
-		    i += 1
-		frameClass = data[4:i]
+            if replyConn in readable:
+                data = replyConn.recv(1024)
+
+                if data == '':
+                	raise ValueError('Failed to read reply socket.')
+
+                print("reply: ", data)
+                frameNum = data[0:4]
+                i = 4
+                while i < len(data) and data[i] != "^":
+                    i += 1
+                frameClass = data[4:i]
 		
-		match = None
-		classNum = 0
-		while match is not None and classNum < len(classList):
-		    match = re.search(frameClass, classList[classNum], re.I)
-		    classNum += 1
-		if match is not None:
-    		    frameFile = open(filepath, "rb")
-		    frameFile.seek(int(frameNum)*460800)
-		    frame = frameFile.read(460800)
+                match = None
+                classNum = 0
+                while match is not None and classNum < len(classList):
+                    match = re.search(frameClass, classList[classNum], re.I)
+                    classNum += 1
+                if match is not None:
+                    frameFile = open(filepath, "rb")
+                    frameFile.seek(int(frameNum)*460800)
+                    frame = frameFile.read(460800)
 
-		    frame = np.frombuffer(frame, dtype=np.uint8)
+                    frame = np.frombuffer(frame, dtype=np.uint8)
                     frame = np.reshape(frame, (h*3/2, w))
                     RGBMatrix = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_NV21)
 			
-		    relay_train_req(string(classNum).zfill(4), RGBMatrix)
-		    
-	
-	    if conn in readable:
+                    relay_train_req(string(classNum).zfill(4), RGBMatrix)
+
+            if conn in readable:
                 data = conn.recv(460800)
                 f.write(data)
 
@@ -370,7 +375,8 @@ def slideshow_thread(conn, replyConn, filepath):
                     for guess in relay_classify_req(RGBMatrix):
                         conn.sendall(guess + ",")
                     
-                    conn.sendall("RECEIVED")
+                    conn.sendall(str(frameCount).zfill(4) + "RECEIVED")
+                    frameCount += 1
 			
     except Exception as e:
         print("Error recieving image.")
@@ -427,8 +433,10 @@ def relay_train_req(classNum, img):
     ret, jpg = cv2.imencode(".jpg", img)
     try:
         r = requests.post(GPU_SERV_train_ADDR, classNum + jpg.tostring())
+        print(r.status_code)
     except Exception as e:
-	print(e)
+        print(e)
+	
 
 def YUVtoRGB(filename):
     w = 640
