@@ -308,7 +308,7 @@ def slideshow_thread(conn, replyConn, filepath):
     print("slideshow")
     classListFile = open(CLASSLIST, "r")
     classList = classListFile.readlines()
-    f = open(filepath, 'wb')
+    fWrite = open(filepath, 'wb')
     fRead = open(filepath, "rb")
     readList =[conn, replyConn]
     frameCount = 0
@@ -350,10 +350,11 @@ def slideshow_thread(conn, replyConn, filepath):
                     RGBMatrix = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_NV21)
 			
                     relay_train_req(string(classNum).zfill(4), RGBMatrix)
+		    frameFile.close()
 
             if conn in readable:
                 data = conn.recv(460800)
-                f.write(data)
+                fWrite.write(data)
 
                 if len(byteArray) < 460800:
                     byteArray = byteArray + fRead.read(460800)
@@ -381,8 +382,9 @@ def slideshow_thread(conn, replyConn, filepath):
     except Exception as e:
         print("Error recieving image.")
         print(e)
-        f.close()
+        fWrite.close()
         conn.close()
+	os.remove(filepath) 
         return
 
     conn.close()
