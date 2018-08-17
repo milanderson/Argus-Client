@@ -18,8 +18,8 @@ IR_REQ_SS = 'Slideshow'
 IR_READY = "Ready"
 CURR_FILE_ID = 0
 SERVER_IP = '0.0.0.0'
-GPU_SERV_CLASS_ADDR = "localhost:8000/api/classify"
-GPU_SERV_TRAIN_ADDR = "localhost:8000/api/train"
+GPU_SERV_CLASS_ADDR = "130.245.158.1:8000/api/classify"
+GPU_SERV_TRAIN_ADDR = "130.245.158.1:8000/api/train"
 CLASSLIST = 'classlist.txt'
 
 class IRDispatcher(Daemon):
