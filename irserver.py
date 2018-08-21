@@ -308,7 +308,6 @@ def slideshow_thread(conn, replyConn):
     classListFile = open(CLASSLIST, "r")
     classList = classListFile.readlines()
     readList =[conn, replyConn]
-    frameCount = 0
     frame = null
     byteArray = ""
     
@@ -363,8 +362,7 @@ def slideshow_thread(conn, replyConn):
                     for guess in relay_classify_req(RGBMatrix):
                         conn.sendall(guess + ",")
                     
-                    conn.sendall(str(frameCount).zfill(4) + "RECEIVED")
-                    frameCount += 1
+                    conn.sendall("RECEIVED")
 			
     except Exception as e:
         print("Error recieving image.")
