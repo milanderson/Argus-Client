@@ -321,9 +321,9 @@ def slideshow_thread(conn, replyConn):
             readable, writable, errored = select.select(readList, [], [])
 
             if replyConn in readable:
-                data = replyConn.recv(4)
+                frameClass = replyConn.recv(1024)
 
-                if data == '':
+                if frameClass == '':
                 	raise ValueError('Failed to read reply socket.')
 
                 print("reply: ", data)
