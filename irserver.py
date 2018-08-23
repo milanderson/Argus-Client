@@ -326,7 +326,7 @@ def slideshow_thread(conn, replyConn):
                 if frameClass == '':
                 	raise ValueError('Failed to read reply socket.')
 
-                print("reply: ", data)
+                print("reply: ", frameClass)
 		
                 match = re.search(frameClass, classList[0], re.I)
                 classNum = 0
