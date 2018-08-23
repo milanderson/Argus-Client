@@ -308,7 +308,7 @@ def slideshow_thread(conn, replyConn):
     classListFile = open(CLASSLIST, "r")
     classList = classListFile.readlines()
     readList =[conn, replyConn]
-    frame = null
+    frame = None
     byteArray = ""
     
     w = 640
@@ -328,11 +328,11 @@ def slideshow_thread(conn, replyConn):
 
                 print("reply: ", data)
 		
-                match = None
+                match = re.search(frameClass, classList[0], re.I)
                 classNum = 0
                 while match is not None and classNum < len(classList):
-                    match = re.search(frameClass, classList[classNum], re.I)
                     classNum += 1
+                    match = re.search(frameClass, classList[classNum], re.I)
                 if match is not None:
                     RGBMatrix = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_NV21)
 			
