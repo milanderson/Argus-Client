@@ -1,4 +1,0 @@
-#Fri Jul 13 13:22:13 EDT 2018
-base.0=C\:\\Users\\Tumbleweed\\Desktop\\Proj\\IR-Server\\IRClient_Android\\app\\build\\intermediates\\transforms\\dexMerger\\debug\\33
-path.0=classes.dex
-renamed.0=classes.dex
