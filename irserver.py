@@ -64,7 +64,6 @@ class IRDispatcher(Daemon):
 	
 	    sReply = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	    sReply.bind((SERVER_IP, 50506))
-	    sReply.setblocking(0)
 	
             s.listen(3)
 	    sReply.listen(3)
@@ -83,8 +82,10 @@ class IRDispatcher(Daemon):
 	    if sReply in readable:
 		try:
 		    replyConn, addr = sReply.accept()
-		    t = threading.Thread(target=slideshow_thread, args=(conn, replyConn))
-                    t.start()
+		    if len(connList) > 0:
+		    	conn = connList.pop(0)
+		    	t = threading.Thread(target=slideshow_thread, args=(conn, replyConn))
+                    	t.start()
 		except Exception as e:
 		    print("Error accepting reply socket.")
 		    print(e)
