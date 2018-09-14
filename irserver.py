@@ -341,11 +341,9 @@ def slideshow_thread(conn, replyConn):
 		    frameFile.close()
 
             if conn in readable:
-                data = conn.recv(460800)
+                byteArray = byteArray + conn.recv(460800)
 
-                if len(byteArray) < 460800:
-                    byteArray = byteArray + data
-                else:
+                if len(byteArray) > 460800:
                     print("full frame")
                 
                     frame = byteArray[:460800]
