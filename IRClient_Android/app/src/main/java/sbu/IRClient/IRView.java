@@ -198,6 +198,21 @@ public class IRView extends View {
         return index - x + rowLen - 1;
     }
 
+    public boolean isIndexInLine(int[] line, int length) throws Exception {
+        int curLen = 0;
+        for (int item = 0; item < line.length; item +=2){
+            if (curLen <= length && curLen + line[item + 1] >= length){
+                if(line[item] == 0){
+                    return false;
+                }
+                return true;
+            }
+            curLen += line[item +1];
+        }
+
+        throw new Exception("Line end reached. Line and length arguments do not match");
+    }
+
     public void setContoursFromBitMask(String recvMsg){
         Log.d(IRClient.TAG, "setting bitmask");
 
@@ -217,7 +232,13 @@ public class IRView extends View {
                 int xCoord = 0;
                 for (int item = 0; item < line.length; item += 2) {
                     if (line[item] == 1) {
-                        startPoint = new MaskPoint(xCoord, lineNum, line[item + 1], item);
+                        boolean isLinePoint = false;
+                        if(line[item + 1] == 1 || lineNum == mask.getLength() - 1 ||
+                                !isIndexInLine(mask.getLine(lineNum + 1), xCoord)){
+                            isLinePoint = true;
+                        }
+                        startPoint = new MaskPoint(xCoord, lineNum, line[item + 1], item, isLinePoint);
+                        startPoint.Visit();
                         item = line.length - 2;
                         lineNum = mask.getLength();
                     }
@@ -235,9 +256,8 @@ public class IRView extends View {
 
             //Log.d(IRClient.TAG, "startpoint: " + Integer.toString(startPoint.x) + " " + Integer.toString(startPoint.y));
 
-            // wrap around the bitmask finding the next point
+            // 'wrap' around the bitmask finding the next point by moving around the polygonal hull clockwise
             MaskPoint currPoint = startPoint;
-            MaskPoint nextPoint = null;
             int lineNum = (int) startPoint.x + 1;
             int direction = 1;
             int prevDir = direction;
@@ -248,91 +268,261 @@ public class IRView extends View {
                 int xCoord = 0;
                 int missCount = 0;
                 boolean found = false;
+                MaskPoint connPtA, connPtB, connPtC, connPtD;
                 for (int item = 0; item < line.length; item += 2) {
+                    // if there is a run of 1s in the mask add the next point to our point list
                     if (line[item] == 1) {
                         int xCoord2 = xCoord + line[item + 1] - 1;
+                        // search for pre-existing connection points
+                        connPtA = null;
+                        connPtB = null;
+                        connPtC = null;
+                        connPtD = null;
+                        for(MaskPoint pt : pts) {
+                            if(pt.x == xCoord && pt.y == lineNum) {
+                                connPtA = pt;
+                            }
+                            if(pt.x == xCoord2 && pt.y == lineNum) {
+                                connPtB = pt;
+                            }
+                            if(pt.x == currPoint.x && pt.y == lineNum) {
+                                connPtC = pt;
+                            }
+                            if(pt.x == xCoord && pt.y == currPoint.y){
+                                connPtD = pt;
+                            }
+                        }
+
+                        // if the run of 1s starts in line with previous point, or is a left extension of previous point
                         if (    ((xCoord == currPoint.x) ||
                                  (xCoord2 == currPoint.x && lineNum == currPoint.y)) &&
-                                !currPoint.isConnected(xCoord, lineNum)) {
+                                (connPtA == null || (connPtA.isLinePoint && connPtA.VisitCount() < 2))) {
                             //Log.d(IRClient.TAG, "Connecting " + Integer.toString(currPoint.x) + "," + Integer.toString(currPoint.y) + " to " + Integer.toString(xCoord) + ", " + Integer.toString(lineNum));
-                            MaskPoint newPt = new MaskPoint(xCoord, lineNum, line[item + 1], item);
-                            currPoint.connections.add(newPt);
-                            newPt.connections.add(currPoint);
-                            pts.add(currPoint);
+
+                            MaskPoint newPt = connPtA;
+                            if (connPtA == null) {
+                                // check line thickness
+                                boolean isLinePoint = false;
+                                if (line[item + 1] == 1 ||
+                                        (lineNum == mask.getLength() - 1 && !isIndexInLine(mask.getLine(lineNum - 1), xCoord)) ||
+                                        (lineNum == 0 && !isIndexInLine(mask.getLine(lineNum + 1), xCoord)) ||
+                                        (!isIndexInLine(mask.getLine(lineNum + 1), xCoord) && !isIndexInLine(mask.getLine(lineNum - 1), xCoord))) {
+                                    isLinePoint = true;
+                                }
+
+                                newPt = new MaskPoint(xCoord, lineNum, line[item + 1], item, isLinePoint);
+                                pts.add(currPoint);
+                            }
+
+                            currPoint.AddConnection(newPt);
+                            newPt.AddConnection(currPoint);
+                            newPt.Visit();
                             currPoint = newPt;
                             found = true;
                             missCount = 0;
 
                             item = line.length - 2;
+                        // if the run of 1s ends in line with previous point, or is a right extension of previous point
                         } else if ( ((xCoord2 == currPoint.x) ||
                                     (lineNum == currPoint.y && xCoord == currPoint.x)) &&
-                                    !currPoint.isConnected(xCoord2, lineNum)) {
+                                (connPtB == null || (connPtB.isLinePoint && connPtB.VisitCount() < 2))) {
                             //Log.d(IRClient.TAG, "Connecting " + Integer.toString(currPoint.x) + "," + Integer.toString(currPoint.y) + " to " + Integer.toString(xCoord2) + ", " + Integer.toString(lineNum));
-                            MaskPoint newPt = new MaskPoint(xCoord2, lineNum, 1, item);
-                            currPoint.connections.add(newPt);
-                            newPt.connections.add(currPoint);
-                            pts.add(currPoint);
+
+                            MaskPoint newPt = connPtB;
+                            if(connPtB == null) {
+                                // check line thickness
+                                boolean isLinePoint = false;
+                                if (line[item + 1] == 1 ||
+                                        (lineNum == mask.getLength() - 1 && !isIndexInLine(mask.getLine(lineNum - 1), xCoord2)) ||
+                                        (lineNum == 0 && !isIndexInLine(mask.getLine(lineNum + 1), xCoord2)) ||
+                                        (!isIndexInLine(mask.getLine(lineNum + 1), xCoord2) && !isIndexInLine(mask.getLine(lineNum - 1), xCoord2))) {
+                                    isLinePoint = true;
+                                }
+                                newPt = new MaskPoint(xCoord2, lineNum, 1, item, isLinePoint);
+                                pts.add(currPoint);
+                            }
+
+                            currPoint.AddConnection(newPt);
+                            newPt.AddConnection(currPoint);
+                            newPt.Visit();
                             currPoint = newPt;
                             found = true;
                             missCount = 0;
 
                             item = line.length - 2;
+                        // if the run of 1s crosses the previous point
                         } else if ((currPoint.x > xCoord && currPoint.x < xCoord2) &&
-                                    !currPoint.isConnected(currPoint.x, lineNum)){
+                                (connPtC == null || (connPtC.isLinePoint && connPtC.VisitCount() < 2))){
                             //Log.d(IRClient.TAG, "Connecting " + Integer.toString(currPoint.x) + "," + Integer.toString(currPoint.y) + " to " + Integer.toString(currPoint.x) + ", " + Integer.toString(lineNum));
-                            MaskPoint newPtA = new MaskPoint(currPoint.x, lineNum, xCoord2 - currPoint.x + 1, item);
-                            currPoint.connections.add(newPtA);
-                            newPtA.connections.add(currPoint);
 
+                            MaskPoint newPtA = currPoint.isConnected(currPoint.x, lineNum);
+                            if(newPtA == null || !newPtA.isLinePoint || newPtA.VisitCount() >= 2) {
+                                // drop an 'anchor point' in the middle of the run in line with previous point
+                                // check line thickness
+                                boolean isLinePoint = false;
+                                if (line[item + 1] == 1 ||
+                                        (lineNum == mask.getLength() - 1 && (!isIndexInLine(mask.getLine(lineNum - 1), currPoint.x + 1) || !isIndexInLine(mask.getLine(lineNum - 1), currPoint.x - 1))) ||
+                                        (lineNum == 0 && (!isIndexInLine(mask.getLine(lineNum + 1), currPoint.x + 1) || !isIndexInLine(mask.getLine(lineNum - 1), currPoint.x - 1))) ||
+                                        (!isIndexInLine(mask.getLine(lineNum + 1), currPoint.x + 1) && !isIndexInLine(mask.getLine(lineNum - 1), currPoint.x + 1)) ||
+                                        (!isIndexInLine(mask.getLine(lineNum + 1), currPoint.x - 1) && !isIndexInLine(mask.getLine(lineNum - 1), currPoint.x - 1))) {
+                                    isLinePoint = true;
+                                }
+
+                                newPtA = new MaskPoint(currPoint.x, lineNum, xCoord2 - currPoint.x + 1, item, isLinePoint);
+
+                                currPoint.AddConnection(newPtA);
+                                newPtA.AddConnection(currPoint);
+                                pts.add(newPtA);
+                            }
+                            newPtA.Visit();
+
+                            // extend 'anchor point' to a point at the end of the run (moving clockwise based on current direction)
                             MaskPoint newPtB = null;
                             if(direction == 1){
                                 if(currPoint.index > 1) {
+                                    // handle crenelations (checkerboarding in the bitmask)
                                     int newXCoord = currPoint.x - mask.getLine(currPoint.y)[currPoint.index - 1] - 1;
-                                    if(newXCoord > xCoord){
-                                        newPtB = new MaskPoint(newXCoord, lineNum, newXCoord - xCoord + 1, item);
+
+                                    if(newXCoord > xCoord) {
+                                        for(MaskPoint pt: pts){
+                                            if(pt.x == newXCoord && pt.y == lineNum){
+                                                newPtB = pt;
+                                            }
+                                        }
+
+                                        if(newPtB == null) {
+                                            // check line thickness
+                                            boolean isLinePoint = false;
+                                            if (line[item + 1] == 1 ||
+                                                    (lineNum == mask.getLength() - 1 && (!isIndexInLine(mask.getLine(lineNum - 1), newXCoord + 1) || !isIndexInLine(mask.getLine(lineNum - 1), newXCoord - 1))) ||
+                                                    (lineNum == 0 && (!isIndexInLine(mask.getLine(lineNum + 1), newXCoord + 1) || !isIndexInLine(mask.getLine(lineNum + 1), newXCoord - 1))) ||
+                                                    (!isIndexInLine(mask.getLine(lineNum + 1), newXCoord + 1) && !isIndexInLine(mask.getLine(lineNum - 1), newXCoord + 1)) ||
+                                                    (!isIndexInLine(mask.getLine(lineNum + 1), newXCoord - 1) && !isIndexInLine(mask.getLine(lineNum - 1), newXCoord - 1))) {
+                                                isLinePoint = true;
+                                            }
+
+                                            newPtB = new MaskPoint(newXCoord, lineNum, xCoord2 - newXCoord + 1, item, isLinePoint);
+                                            pts.add(newPtB);
+                                        }
+
                                         direction *= -1;
+                                        newPtB.Visit();
+                                    } else {
+                                        newPtB = connPtA;
+                                        if(newPtB == null) {
+                                            // check line thickness
+                                            boolean isLinePoint = false;
+                                            if (line[item + 1] == 1 ||
+                                                    (lineNum == mask.getLength() - 1 && !isIndexInLine(mask.getLine(lineNum - 1), xCoord)) ||
+                                                    (lineNum == 0 && !isIndexInLine(mask.getLine(lineNum + 1), xCoord)) ||
+                                                    (!isIndexInLine(mask.getLine(lineNum + 1), xCoord) && !isIndexInLine(mask.getLine(lineNum - 1), xCoord))) {
+                                                isLinePoint = true;
+                                            }
+
+                                            newPtB = new MaskPoint(xCoord, lineNum, xCoord2 - xCoord + 1, item, isLinePoint);
+                                            pts.add(newPtB);
+                                        }
+
+                                        newPtB.Visit();
                                     }
-                                }
-                                if(newPtB == null){
-                                    newPtB = new MaskPoint(xCoord, lineNum, line[item + 1], item);
                                 }
                             } else {
+                                // handle crenelations (checkerboarding in the bitmask)
                                 if(currPoint.index < mask.getLine(currPoint.y).length - 2){
                                     int newXCoord = currPoint.x + currPoint.runLength + mask.getLine(currPoint.y)[currPoint.index + 3];
+
                                     if(newXCoord < xCoord2) {
-                                        newPtB = new MaskPoint(newXCoord, lineNum, xCoord2 - newXCoord + 1, item);
+
+                                        for(MaskPoint pt: pts){
+                                            if(pt.x == newXCoord && pt.y == lineNum){
+                                                newPtB = pt;
+                                            }
+                                        }
+
+                                        if(newPtB == null) {
+                                            // check line thickness
+                                            boolean isLinePoint = false;
+                                            if (line[item + 1] == 1 ||
+                                                    (lineNum == mask.getLength() - 1 && (!isIndexInLine(mask.getLine(lineNum - 1), newXCoord + 1) || !isIndexInLine(mask.getLine(lineNum - 1), newXCoord - 1))) ||
+                                                    (lineNum == 0 && (!isIndexInLine(mask.getLine(lineNum + 1), newXCoord + 1)) || !isIndexInLine(mask.getLine(lineNum + 1), newXCoord - 1)) ||
+                                                    (!isIndexInLine(mask.getLine(lineNum + 1), newXCoord + 1) && !isIndexInLine(mask.getLine(lineNum - 1), newXCoord + 1)) ||
+                                                    (!isIndexInLine(mask.getLine(lineNum + 1), newXCoord - 1) && !isIndexInLine(mask.getLine(lineNum - 1), newXCoord - 1))) {
+                                                isLinePoint = true;
+                                            }
+
+                                            newPtB = new MaskPoint(newXCoord, lineNum, xCoord2 - newXCoord + 1, item, isLinePoint);
+                                        }
                                         direction *= -1;
+                                        newPtB.Visit();
+                                    } else {
+                                        newPtB = connPtB;
+                                        if(newPtB == null) {
+                                            // check line thickness
+                                            boolean isLinePoint = false;
+                                            if (line[item + 1] == 1 ||
+                                                    (lineNum == mask.getLength() - 1 && !isIndexInLine(mask.getLine(lineNum - 1), xCoord2)) ||
+                                                    (lineNum == 0 && !isIndexInLine(mask.getLine(lineNum + 1), xCoord2)) ||
+                                                    (!isIndexInLine(mask.getLine(lineNum + 1), xCoord2) && !isIndexInLine(mask.getLine(lineNum - 1), xCoord2))) {
+                                                isLinePoint = true;
+                                            }
+
+                                            newPtB = new MaskPoint(xCoord2, lineNum, 1, item, isLinePoint);
+                                        }
+
+                                        newPtB.Visit();
                                     }
-                                }
-                                if (newPtB == null){
-                                    newPtB = new MaskPoint(xCoord2, lineNum, 1, item);
                                 }
                             }
                             //Log.d(IRClient.TAG, "Connecting " + Integer.toString(newPtA.x) + "," + Integer.toString(newPtA.y) + " to " + Integer.toString(newPtB.x) + ", " + Integer.toString(newPtB.y));
-                            newPtA.connections.add(newPtB);
-                            newPtB.connections.add(newPtA);
-                            pts.add(currPoint);
-                            pts.add(newPtA);
+                            newPtA.AddConnection(newPtB);
+                            newPtB.AddConnection(newPtA);
 
                             currPoint = newPtB;
                             found = true;
                             missCount = 0;
 
                             item = line.length - 2;
+                        // the run of 1s crosses the end of the run staring from the previous point
                         } else if((currPoint.x < xCoord && currPoint.x + currPoint.runLength - 1 > xCoord2) &&
-                                !currPoint.isConnected(currPoint.x, lineNum)){
+                                (connPtA == null || (connPtA.isLinePoint && connPtA.VisitCount() < 2))){
                             //Log.d(IRClient.TAG, "Connecting " + Integer.toString(currPoint.x) + "," + Integer.toString(currPoint.y) + " to " + Integer.toString(xCoord) + ", " + Integer.toString(currPoint.y));
-                            MaskPoint newPtA = new MaskPoint(xCoord, currPoint.y, currPoint.runLength - (xCoord - currPoint.x), currPoint.index);
-                            newPtA.connections.add(currPoint);
-                            currPoint.connections.add(newPtA);
+
+                            MaskPoint newPtA = connPtD;
+                            if(newPtA == null) {
+                                boolean isLinePoint = false;
+                                if (line[item + 1] == 1 ||
+                                        (currPoint.y == mask.getLength() - 1 && !isIndexInLine(mask.getLine(currPoint.y - 1), xCoord)) ||
+                                        (currPoint.y == 0 && !isIndexInLine(mask.getLine(currPoint.y + 1), xCoord)) ||
+                                        (!isIndexInLine(mask.getLine(currPoint.y + 1), xCoord) && !isIndexInLine(mask.getLine(currPoint.y - 1), xCoord))) {
+                                    isLinePoint = true;
+                                }
+
+                                newPtA = new MaskPoint(xCoord, currPoint.y, currPoint.runLength - (xCoord - currPoint.x), currPoint.index, isLinePoint);
+                                pts.add(newPtA);
+                            }
+                            newPtA.Visit();
+                            newPtA.AddConnection(currPoint);
+                            currPoint.AddConnection(newPtA);
 
                             //Log.d(IRClient.TAG, "Connecting " + Integer.toString(newPtA.x) + "," + Integer.toString(newPtA.y) + " to " + Integer.toString(xCoord) + ", " + Integer.toString(lineNum));
-                            MaskPoint newPtB = new MaskPoint(xCoord, lineNum, line[item + 1], item);
-                            newPtB.connections.add(newPtA);
-                            newPtA.connections.add(newPtB);
 
-                            pts.add(currPoint);
-                            pts.add(newPtA);
+                            MaskPoint newPtB = connPtA;
+                            if (connPtA == null) {
+                                boolean isLinePoint = false;
+                                if (line[item + 1] == 1 ||
+                                        (lineNum == mask.getLength() - 1 && !isIndexInLine(mask.getLine(lineNum - 1), xCoord)) ||
+                                        (lineNum == 0 && !isIndexInLine(mask.getLine(lineNum + 1), xCoord)) ||
+                                        (!isIndexInLine(mask.getLine(lineNum + 1), xCoord) && !isIndexInLine(mask.getLine(lineNum - 1), xCoord))) {
+                                    isLinePoint = true;
+                                }
+
+                                newPtB = new MaskPoint(xCoord, lineNum, line[item + 1], item, isLinePoint);
+                                pts.add(newPtB);
+                            }
+                            newPtB.Visit();
+                            newPtB.AddConnection(newPtA);
+                            newPtA.AddConnection(newPtB);
+
 
                             currPoint = newPtB;
                             found = true;
@@ -478,7 +668,7 @@ public class IRView extends View {
             float yRatio = canvas.getHeight() / maskSize;
             for (MaskPoint point : pts) {
                 //Log.d(IRClient.TAG, "ptA x: " + Float.toString(point.x * xRatio) + " y " + Float.toString(point.y * yRatio));
-                for(MaskPoint conn: point.connections) {
+                for(MaskPoint conn: point.GetConnections()) {
                     canvas.drawLine(point.x * xRatio, point.y * yRatio, conn.x * xRatio, conn.y * yRatio, brush);
                 }
                 //canvas.drawLine(point.x * xRatio, point.y * yRatio, point.rPt.x * xRatio, point.rPt.y * yRatio, brush);

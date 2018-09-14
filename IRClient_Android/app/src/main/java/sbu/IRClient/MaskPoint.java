@@ -4,14 +4,18 @@ import java.util.ArrayList;
 
 public class MaskPoint {
     int x, y;
-    ArrayList<MaskPoint> connections = new ArrayList<MaskPoint>();
+    private  int visited;
+    private ArrayList<MaskPoint> connections = new ArrayList<MaskPoint>();
     int runLength, index;
+    boolean isLinePoint;
 
-    public MaskPoint (int x, int y, int runLength, int index){
+    public MaskPoint (int x, int y, int runLength, int index, boolean isLinePoint){
         this.x = x;
         this.y = y;
         this.runLength = runLength;
         this.index = index;
+        this.visited = 0;
+        this.isLinePoint = isLinePoint;
     }
 
     public static boolean Colinear(MaskPoint ptA, MaskPoint ptB, MaskPoint ptC){
@@ -22,16 +26,38 @@ public class MaskPoint {
         return false;
     }
 
-    public boolean isConnected(int x, int y){
+    public void AddConnection(MaskPoint pt){
+        if(!connections.contains(pt)){
+            connections.add(pt);
+        }
+    }
+
+    public ArrayList<MaskPoint> GetConnections(){
+        return connections;
+    }
+
+    public MaskPoint isConnected(int x, int y){
         if(this.x == x && this.y == y){
-            return true;
+            return this;
         }
 
         for(MaskPoint pt: connections){
             if (pt.x == x && pt.y == y){
-                return true;
+                return pt;
             }
         }
-        return false;
+        return null;
+    }
+
+    public void Visit(){
+        this.visited ++;
+    }
+
+    public int VisitCount(){
+        return this.visited;
+    }
+
+    public boolean IsLinePoint(){
+        return isLinePoint;
     }
 }

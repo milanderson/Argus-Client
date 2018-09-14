@@ -12,18 +12,25 @@ import android.media.MediaCodecList;
 import android.media.MediaRecorder;
 import android.os.AsyncTask;
 import android.os.Environment;
+import android.support.constraint.ConstraintLayout;
 import android.support.v4.app.ActivityCompat;
 import android.os.Bundle;
 import android.support.v4.content.ContextCompat;
+import android.text.Layout;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.view.SurfaceView;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.RelativeLayout;
+import android.widget.TableRow;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -53,6 +60,7 @@ public class IRClient extends Activity {
     public static long sendTime = 0;
 
     public static IRView overlayView;
+    private static SurfaceView backView;
     private TextureView texView;
     private static EditText IPInput;
     private static TextView IPText;
@@ -72,16 +80,18 @@ public class IRClient extends Activity {
             imm.hideSoftInputFromWindow(classInputBar.getWindowToken(), 0);
 
             try {
-                String strMsg = "reply" + classInputBar.getText().toString() + ",";
-                ByteBuffer msg = ByteBuffer.allocate(strMsg.getBytes().length);
-                msg.put(strMsg.getBytes());
-                msg.flip();
-                pipe.sink().write(msg);
+                if(classInputBar.getText() != null && classInputBar.getText().length() > 1){
+                    String strMsg = "reply" + classInputBar.getText().toString() + ",";
+                    ByteBuffer msg = ByteBuffer.allocate(strMsg.getBytes().length);
+                    msg.put(strMsg.getBytes());
+                    msg.flip();
+                    pipe.sink().write(msg);
+                }
             } catch (Exception e){
                 Log.e(TAG, "Error passing reply." + e.toString());
             }
             classInputBar.setText("");
-            onRunStateChanged(null, State.RESPOND);
+            onRunStateChanged(null, State.CLASSIFY);
             return true;
         }
     };
@@ -192,13 +202,28 @@ public class IRClient extends Activity {
     private void initViews(){
         setContentView(R.layout.activity_irclient);
         texView = findViewById(R.id.textureView);
-
         overlayView = findViewById(R.id.overlayView);
+        backView = findViewById(R.id.backView);
+
+        DisplayMetrics metrics = new DisplayMetrics();
+        getWindowManager().getDefaultDisplay().getMetrics(metrics);
+        Log.d(TAG, Float.toString((float)metrics.heightPixels/(float)metrics.widthPixels
+        ));
+        if((float)metrics.heightPixels/(float)metrics.widthPixels > 640.0/480.0){
+            texView.setLayoutParams(new ConstraintLayout.LayoutParams(ViewGroup.LayoutParams.FILL_PARENT, (int)(640.0*((float)metrics.widthPixels/(float)480))));
+            texView.setTranslationY((metrics.heightPixels - (int)(640.0*((float)metrics.widthPixels/480))) / 2);
+        } else {
+            texView.setLayoutParams(new ConstraintLayout.LayoutParams((int)(480.0*((float)metrics.heightPixels/640.0)), ViewGroup.LayoutParams.FILL_PARENT));
+            texView.setTranslationX((metrics.widthPixels - (int)(480.0*((float)metrics.heightPixels/640.0))) / 2);
+        }
+
         overlayView.setOnTouchListener(new View.OnTouchListener() {
             @Override
             public boolean onTouch(View view, MotionEvent motionEvent) {
                 if(getState() == State.CLASSIFY && overlayView.setButtons((int)motionEvent.getX(), (int)motionEvent.getY())) {
                     onRunStateChanged(null, State.RESPOND);
+                } else if(getState() == State.RESPOND){
+                    onRunStateChanged(null, State.CLASSIFY);
                 }
                 return false;
             }
@@ -269,13 +294,15 @@ public class IRClient extends Activity {
                         }
                     };
                     try{
-                        InetAddress IP = task.execute(IPInput.getText().toString()).get();
-                        if(IP != null) {
-                            IRClient_NetTask.SERVER_IP = IPInput.getText().toString();
-                            IPText.setText("Current Server: " + IP.toString());
-                        } else {
-                            Log.e(TAG, "Search for: " + IPInput.getText().toString());
-                            onRunStateChanged("Unknown host", State.OPTIONS);
+                        if(IPInput.getText() != null && IPInput.getText().length() > 2) {
+                            InetAddress IP = task.execute(IPInput.getText().toString()).get();
+                            if (IP != null) {
+                                IRClient_NetTask.SERVER_IP = IPInput.getText().toString();
+                                IPText.setText("Current Server: " + IP.toString());
+                            } else {
+                                Log.e(TAG, "Search for: " + IPInput.getText().toString());
+                                onRunStateChanged("Unknown host", State.OPTIONS);
+                            }
                         }
                     } catch (Exception e){
                         Log.e(TAG, e.toString());
@@ -562,11 +589,13 @@ public class IRClient extends Activity {
     public void onPause(){
         super.onPause();
         try {
-            signalInBuf.clear();
-            signalInBuf.put("NETEXIT".getBytes());
-            signalInBuf.flip();
-            while (signalInBuf.hasRemaining()) {
-                pipe.sink().write(signalInBuf);
+            if(getState() == State.CLASSIFY || getState() == State.RESPOND) {
+                signalInBuf.clear();
+                signalInBuf.put("NETEXIT".getBytes());
+                signalInBuf.flip();
+                while (signalInBuf.hasRemaining()) {
+                    pipe.sink().write(signalInBuf);
+                }
             }
         } catch (Exception e) {
             Log.d(TAG, "Error pausing." + e.toString());
@@ -616,6 +645,7 @@ public class IRClient extends Activity {
             overlayView.setBackgroundResource(R.color.white);
 
             runningClient.findViewById(R.id.optMenu).setVisibility(View.INVISIBLE);
+            backView.setVisibility(View.INVISIBLE);
             STbutton.setVisibility(View.VISIBLE);
             OPbutton.setVisibility(View.VISIBLE);
             runningClient.findViewById(R.id.selStart).setVisibility(View.VISIBLE);
@@ -632,19 +662,28 @@ public class IRClient extends Activity {
         }
 
         if(state == State.CLASSIFY){
-            Log.d(TAG, "init Cam");
-            runningClient.initCam();
+            if(getState() != State.CLASSIFY && getState() != State.RESPOND) {
+                Log.d(TAG, "init Cam");
+                runningClient.initCam();
 
-            overlayView.setBackgroundResource(R.color.transparent);
-            STbutton.setVisibility(View.INVISIBLE);
-            OPbutton.setVisibility(View.INVISIBLE);
-            runningClient.findViewById(R.id.selStart).setVisibility(View.INVISIBLE);
-            runningClient.findViewById(R.id.selOptions).setVisibility(View.INVISIBLE);
-            TRbutton.setVisibility(View.INVISIBLE);
-            TLbutton.setVisibility(View.INVISIBLE);
-            BRbutton.setVisibility(View.INVISIBLE);
-            BLbutton.setVisibility(View.INVISIBLE);
-            classInputBar.setVisibility(View.INVISIBLE);
+                overlayView.setBackgroundResource(R.color.transparent);
+                backView.setVisibility(View.VISIBLE);
+                STbutton.setVisibility(View.INVISIBLE);
+                OPbutton.setVisibility(View.INVISIBLE);
+                runningClient.findViewById(R.id.selStart).setVisibility(View.INVISIBLE);
+                runningClient.findViewById(R.id.selOptions).setVisibility(View.INVISIBLE);
+                TRbutton.setVisibility(View.INVISIBLE);
+                TLbutton.setVisibility(View.INVISIBLE);
+                BRbutton.setVisibility(View.INVISIBLE);
+                BLbutton.setVisibility(View.INVISIBLE);
+                classInputBar.setVisibility(View.INVISIBLE);
+            }
+            if(RunState == State.RESPOND){
+                Log.d(TAG, "Resuming classification mode");
+                classInputBar.setVisibility(View.INVISIBLE);
+                cam.setPreviewCallback(framePasser);
+                cam.startPreview();
+            }
         }
 
         if(state == State.FAILURE){
@@ -654,21 +693,9 @@ public class IRClient extends Activity {
         }
 
         if(state == State.RESPOND){
-            if(RunState == State.RESPOND){
-                Log.d(TAG, "Resuming classification mode");
-                TRbutton.setVisibility(View.INVISIBLE);
-                TLbutton.setVisibility(View.INVISIBLE);
-                BRbutton.setVisibility(View.INVISIBLE);
-                BLbutton.setVisibility(View.INVISIBLE);
-                classInputBar.setVisibility(View.INVISIBLE);
-                cam.setPreviewCallback(framePasser);
-                cam.startPreview();
-                state = State.CLASSIFY;
-            } else {
-                Log.d(TAG, "Test");
-                cam.stopPreview();
-                Log.d(TAG, "Waiting for response");
-            }
+            Log.d(TAG, "Test");
+            cam.stopPreview();
+            Log.d(TAG, "Waiting for response");
         }
 
         RunState = state;

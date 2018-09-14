@@ -87,7 +87,7 @@ public class IRClient_NetTask extends AsyncTask<IRClient, Void, Void> {
                 sReadKey = msgSock.register(selector, SelectionKey.OP_READ);
                 Log.d(IRClient.TAG, "network thread initialized");
             } catch (Exception e) {
-                Log.e(IRClient.TAG, "Socket init error.\n" + e.toString());
+                Log.e(IRClient.TAG, "Socket init error. " + e.toString());
                 exitMsg = "Connection failed.";
                 mainHandler.post(exit_nettask);
                 return null;
