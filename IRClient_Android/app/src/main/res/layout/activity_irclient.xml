@@ -4,15 +4,127 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".IRClient">
+    tools:context="sbu.IRClient.IRClient">
+
+    <sbu.IRClient.IRView
+        android:id="@+id/overlayView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:elevation="1dp" />
 
     <TextureView
         android:id="@+id/textureView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:elevation="0dp" />
+        android:elevation="0dp"
+        android:layout_centerInParent="true" />
+    <SurfaceView
+        android:id="@+id/backView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:elevation="-1dp"
+        android:background="@color/black"
+        />
 
-    <sbu.irclient.ClassInputBar
+    <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:tools="http://schemas.android.com/tools"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:elevation="2dp"
+        android:stretchColumns="*"
+        android:orientation="vertical" >
+        <RelativeLayout
+            android:id="@+id/selStart"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_weight="0.5">
+                    <Button
+                        android:id="@+id/buttonStart"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_margin="10dp"
+                        android:padding="10dp"
+                        android:text="Start"
+                        android:textSize="18dp"
+                        android:gravity="center|bottom"
+                        android:visibility="visible"
+                        android:elevation="0dp"/>
+                    <ImageView
+                        android:layout_width="100dp"
+                        android:layout_height="100dp"
+                        android:src="@drawable/camera"
+                        android:layout_centerInParent="true"
+                        android:visibility="visible"
+                        android:elevation="2dp"/>
+                </RelativeLayout>
+            <RelativeLayout
+                android:id="@+id/selOptions"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_weight="0.5">
+                <Button
+                    android:id="@+id/buttonOptions"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_margin="10dp"
+                    android:padding="10dp"
+                    android:text="Options"
+                    android:textSize="18dp"
+                    android:gravity="center|bottom"
+                    android:visibility="visible"
+                    android:elevation="0dp"/>
+                <ImageView
+                    android:layout_width="100dp"
+                    android:layout_height="100dp"
+                    android:src="@drawable/options"
+                    android:layout_centerInParent="true"
+                    android:visibility="visible"
+                    android:elevation="2dp"/>
+            </RelativeLayout>
+    </LinearLayout>
+
+    <TableLayout
+        xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:tools="http://schemas.android.com/tools"
+        android:id="@+id/optMenu"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:elevation="2dp"
+        android:stretchColumns="*"
+        android:visibility="invisible">
+        <TableRow
+            android:layout_marginTop="20dp">
+            <EditText
+                android:id="@+id/inputIP"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:hint="Enter Server IP Address"
+                android:inputType="text|textAutoCorrect" />
+            <Button
+                android:id="@+id/buttonIP"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:text="Set Server"/>
+        </TableRow>
+        <TableRow
+            android:layout_marginLeft="4dp">
+            <TextView
+                android:id="@+id/optTextIP"
+                android:layout_height="wrap_content"
+                android:layout_width="wrap_content"
+                android:text=""/>
+        </TableRow>
+        <TableRow
+            android:layout_marginTop="20dp">
+            <Button
+                android:id="@+id/buttonOptRet"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:text="Back"/>
+        </TableRow>
+    </TableLayout>
+
+    <sbu.IRClient.ClassInputBar
         android:id="@+id/classInputBar"
         android:layout_width="fill_parent"
         android:layout_height="wrap_content"
@@ -29,42 +141,55 @@
         android:stretchColumns="*"
         android:layout_alignParentBottom="true">
         <TableRow>
-            <Button
-                android:id="@+id/buttonTL"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Unknown"
-                android:visibility="invisible"
-                tools:layout_editor_absoluteX="0dp"
-                tools:layout_editor_absoluteY="408dp" />
+            <LinearLayout
+                android:layout_width="fill_parent"
+                android:layout_height="fill_parent"
+                android:weightSum="1">
+                <Button
+                    android:id="@+id/buttonTL"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.5"
+                    android:text="Unknown"
+                    android:visibility="invisible"
+                    tools:layout_editor_absoluteX="0dp"
+                    tools:layout_editor_absoluteY="408dp" />
 
-            <Button
-                android:id="@+id/buttonTR"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text=""
-                android:visibility="invisible"
-                tools:layout_editor_absoluteX="194dp"
-                tools:layout_editor_absoluteY="408dp" />
+                <Button
+                    android:id="@+id/buttonTR"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.5"
+                    android:text=""
+                    android:visibility="invisible"
+                    tools:layout_editor_absoluteX="194dp"
+                    tools:layout_editor_absoluteY="408dp" />
+            </LinearLayout>
         </TableRow>
         <TableRow>
-            <Button
-                android:id="@+id/buttonBL"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text=""
-                android:visibility="invisible"
-                tools:layout_editor_absoluteX="0dp"
-                tools:layout_editor_absoluteY="459dp" />
-
-            <Button
-                android:id="@+id/buttonBR"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text=""
-                android:visibility="invisible"
-                tools:layout_editor_absoluteX="194dp"
-                tools:layout_editor_absoluteY="460dp" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:weightSum="1">
+                <Button
+                    android:id="@+id/buttonBL"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.5"
+                    android:text=""
+                    android:visibility="invisible"
+                    tools:layout_editor_absoluteX="0dp"
+                    tools:layout_editor_absoluteY="459dp" />
+                <Button
+                    android:id="@+id/buttonBR"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.5"
+                    android:text=""
+                    android:visibility="invisible"
+                    tools:layout_editor_absoluteX="194dp"
+                    tools:layout_editor_absoluteY="460dp" />
+            </LinearLayout>
         </TableRow>
     </TableLayout>
 

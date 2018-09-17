@@ -82,9 +82,12 @@ class IRDispatcher(Daemon):
 	    if sReply in readable:
 		try:
 		    replyConn, addr = sReply.accept()
-                    conn = connList.pop(0)
-		    t = threading.Thread(target=slideshow_thread, args=(conn, replyConn))
-                    t.start()
+
+		    if len(connList) > 0:
+		    	conn = connList.pop(0)
+		    	t = threading.Thread(target=slideshow_thread, args=(conn, replyConn))
+                    	t.start()
+
 		except Exception as e:
 		    #print("Error accepting reply socket.")
 		    #print(e)
@@ -321,18 +324,16 @@ def slideshow_thread(conn, replyConn):
             readable, writable, errored = select.select(readList, [], [])
 
             if replyConn in readable:
-                frameClass = replyConn.recv(4)
+                frameClass = replyConn.recv(1024)
 
                 if frameClass == '':
-                	raise ValueError('Failed to read reply socket.')
+                    raise ValueError('Failed to read reply socket.')
 
                 #print("reply: ", frameClass)
 		
-                match = re.search(frameClass, classList[0], re.I)
                 classNum = 0
-                while match is not None and classNum < len(classList):
+                while re.search(frameClass, classList[classNum], re.I) is None and classNum < len(classList):
                     classNum += 1
-                    match = re.search(frameClass, classList[classNum], re.I)
                 if match is not None:
                     RGBMatrix = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_NV21)
 			
@@ -416,7 +417,7 @@ def relay_classify_req(img):
 def relay_train_req(classNum, img):
     ret, jpg = cv2.imencode(".jpg", img)
     try:
-        r = requests.post(GPU_SERV_train_ADDR, classNum + jpg.tostring())
+        r = requests.post(GPU_SERV_TRAIN_ADDR, classNum + jpg.tostring())
         #print(r.status_code)
     except Exception as e:
         doNothing = 1
