@@ -20,7 +20,7 @@ CURR_FILE_ID = 0
 SERVER_IP = '0.0.0.0'
 GPU_SERV_CLASS_ADDR = "http://127.0.0.1:8000/api/classify"
 GPU_SERV_TRAIN_ADDR = "http://127.0.0.1:8000/api/train"
-CLASSLIST = '/var/services/homes/milanderson/test/IR-Server/classlist.txt'
+CLASSLIST = 'classlist.txt'
 
 class IRDispatcher(Daemon):
 
@@ -86,7 +86,7 @@ class IRDispatcher(Daemon):
 		    if len(connList) > 0:
 		    	conn = connList.pop(0)
 		    	t = threading.Thread(target=slideshow_thread, args=(conn, replyConn))
-                    	t.start()
+		    	t.start()
 
 		except Exception as e:
 		    #print("Error accepting reply socket.")
@@ -117,8 +117,8 @@ class IRDispatcher(Daemon):
                     t.start()
                 elif IR_REQ_SS in data:
                     connList.append(conn)
-		    if len(connList) > 10:
-		        connList.pop(0).close()
+                    if len(connList) > 10:
+                        connList.pop(0).close()
                 elif IR_REQ_MP4ST in data:
                     path = self.next_filename()
                     t = threading.Thread(target=mp4stream_thread, args=(conn, path))
@@ -311,6 +311,7 @@ def slideshow_thread(conn, replyConn):
     classListFile = open(CLASSLIST, "r")
     classList = classListFile.readlines()
     readList =[conn, replyConn]
+    lock = threading.Lock()
     frame = None
     byteArray = ""
     
@@ -334,18 +335,21 @@ def slideshow_thread(conn, replyConn):
                 classNum = 0
                 while re.search(frameClass, classList[classNum], re.I) is None and classNum < len(classList):
                     classNum += 1
-                if match is not None:
+                if classNum < len(classList):
                     RGBMatrix = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_NV21)
-                    relay_train_req(string(classNum).zfill(4), RGBMatrix)
+                    t = threading.Thread(target=relay_train_req, args=(str(classNum).zfill(4), RGBMatrix))
+                    t.start()
 
             if conn in readable:
-                byteArray = byteArray + conn.recv(460800)
+                byteArray = byteArray + conn.recv(460804)
 
-                if len(byteArray) > 460800:
+                if len(byteArray) > 460804:
                     #print("full frame")
                 
-                    frame = byteArray[:460800]
-                    byteArray = byteArray[460800:]
+                    frameNum = int(byteArray[:4])
+
+                    frame = byteArray[4:460804]
+                    byteArray = byteArray[460804:]
 
                     frame = np.frombuffer(frame, dtype=np.uint8)
                     frame = np.reshape(frame, (h*3/2, w))
@@ -356,10 +360,8 @@ def slideshow_thread(conn, replyConn):
                     #if cv2.waitKey(1) & 0xFF == ord('q'):
                     #    break
 
-                    for guess in relay_classify_req(RGBMatrix):
-                        conn.sendall(guess + ",")
-                    
-                    conn.sendall("RECEIVED")
+                    t = threading.Thread(target=relay_classify_req, args=(conn, RGBMatrix, frameNum, lock))
+                    t.start()
 			
     except Exception as e:
         #print("Error recieving image.")
@@ -392,7 +394,7 @@ def train_thread(conn, filepath):
 
 # pass an image to a classifier
 # implementation will differ
-def relay_classify_req(img):
+def relay_classify_req(conn, img, frameNum, lock):
     ret, jpg = cv2.imencode(".jpg", img)
     responses = list()
 
@@ -407,9 +409,22 @@ def relay_classify_req(img):
                     endPt = len(data[i]['label'])
 
                 responses.append(data[i]['label'][10:endPt])
+
+            try:
+                lock.acquire()
+                conn.sendall(str(frameNum).zfill(4))
+                for guess in responses:
+                    conn.sendall(guess + ",")
+                conn.sendall("RECEIVED")
+            except Exception as e:
+                doNothing = 1
+                #print(e)
+            finally:
+                lock.release()
     except Exception as e:
         doNothing = 1
         #print(e)
+
     return responses
 
 def relay_train_req(classNum, img):
@@ -440,5 +455,4 @@ def relay_frame_classify_req(frame):
 # init daemon
 if __name__ == "__main__":
     daemon = IRDispatcher('/tmp/IRDispatcher.pid')
-    daemon.delpid()
     daemon.start()
