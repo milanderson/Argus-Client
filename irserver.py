@@ -20,7 +20,7 @@ CURR_FILE_ID = 0
 SERVER_IP = '0.0.0.0'
 GPU_SERV_CLASS_ADDR = "http://127.0.0.1:8000/api/classify"
 GPU_SERV_TRAIN_ADDR = "http://127.0.0.1:8000/api/train"
-CLASSLIST = 'classlist.txt'
+CLASSLIST = '/var/services/homes/milanderson/test/IR-Server/classlist.txt'
 
 class IRDispatcher(Daemon):
 
@@ -64,7 +64,6 @@ class IRDispatcher(Daemon):
 	
 	    sReply = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	    sReply.bind((SERVER_IP, 50506))
-	    sReply.setblocking(0)
 	
             s.listen(3)
 	    sReply.listen(3)
@@ -83,21 +82,22 @@ class IRDispatcher(Daemon):
 	    if sReply in readable:
 		try:
 		    replyConn, addr = sReply.accept()
+                    conn = connList.pop(0)
 		    t = threading.Thread(target=slideshow_thread, args=(conn, replyConn))
                     t.start()
 		except Exception as e:
-		    print("Error accepting reply socket.")
-		    print(e)
+		    #print("Error accepting reply socket.")
+		    #print(e)
 		    continue
 		
             if s in readable:
 	        try:
                     conn, addr = s.accept()
                     data = conn.recv(1024)
-                    print(data)
+                    #print(data)
                 except Exception as e:
-                    print("Accept and connect failure.")
-                    print(e)
+                    #print("Accept and connect failure.")
+                    #print(e)
                     continue
 		
                 if IR_REQ_TR in data:
@@ -125,8 +125,8 @@ class IRDispatcher(Daemon):
                         conn.sendall(REFUSE_IR_REQ)
                         conn.close()
                     except Exception as e:
-                        print("Refusing connection.")
-                        print(e)
+                        #print("Refusing connection.")
+                        #print(e)
                         continue
 
 def mp4stream_thread(conn, filepath):
@@ -308,7 +308,7 @@ def slideshow_thread(conn, replyConn):
     classListFile = open(CLASSLIST, "r")
     classList = classListFile.readlines()
     readList =[conn, replyConn]
-    frame = null
+    frame = None
     byteArray = ""
     
     w = 640
@@ -321,18 +321,18 @@ def slideshow_thread(conn, replyConn):
             readable, writable, errored = select.select(readList, [], [])
 
             if replyConn in readable:
-                data = replyConn.recv(4)
+                frameClass = replyConn.recv(4)
 
-                if data == '':
+                if frameClass == '':
                 	raise ValueError('Failed to read reply socket.')
 
-                print("reply: ", data)
+                #print("reply: ", frameClass)
 		
-                match = None
+                match = re.search(frameClass, classList[0], re.I)
                 classNum = 0
                 while match is not None and classNum < len(classList):
-                    match = re.search(frameClass, classList[classNum], re.I)
                     classNum += 1
+                    match = re.search(frameClass, classList[classNum], re.I)
                 if match is not None:
                     RGBMatrix = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_NV21)
 			
@@ -340,12 +340,10 @@ def slideshow_thread(conn, replyConn):
 		    frameFile.close()
 
             if conn in readable:
-                data = conn.recv(460800)
+                byteArray = byteArray + conn.recv(460800)
 
-                if len(byteArray) < 460800:
-                    byteArray = byteArray + data
-                else:
-                    print("full frame")
+                if len(byteArray) > 460800:
+                    #print("full frame")
                 
                     frame = byteArray[:460800]
                     byteArray = byteArray[460800:]
@@ -365,8 +363,8 @@ def slideshow_thread(conn, replyConn):
                     conn.sendall("RECEIVED")
 			
     except Exception as e:
-        print("Error recieving image.")
-        print(e)
+        #print("Error recieving image.")
+        #print(e)
         conn.close()
         return
 
@@ -411,17 +409,18 @@ def relay_classify_req(img):
 
                 responses.append(data[i]['label'][10:endPt])
     except Exception as e:
-        print(e)
+        doNothing = 1
+        #print(e)
     return responses
 
 def relay_train_req(classNum, img):
     ret, jpg = cv2.imencode(".jpg", img)
     try:
         r = requests.post(GPU_SERV_train_ADDR, classNum + jpg.tostring())
-        print(r.status_code)
+        #print(r.status_code)
     except Exception as e:
-        print(e)
-	
+        doNothing = 1
+        #print(e)	
 
 def YUVtoRGB(filename):
     w = 640
@@ -442,4 +441,5 @@ def relay_frame_classify_req(frame):
 # init daemon
 if __name__ == "__main__":
     daemon = IRDispatcher('/tmp/IRDispatcher.pid')
-    daemon.run()
+    daemon.delpid()
+    daemon.start()
