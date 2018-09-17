@@ -336,9 +336,7 @@ def slideshow_thread(conn, replyConn):
                     classNum += 1
                 if match is not None:
                     RGBMatrix = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_NV21)
-			
                     relay_train_req(string(classNum).zfill(4), RGBMatrix)
-		    frameFile.close()
 
             if conn in readable:
                 byteArray = byteArray + conn.recv(460800)
