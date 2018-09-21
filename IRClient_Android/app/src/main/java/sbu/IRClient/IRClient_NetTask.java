@@ -4,12 +4,14 @@ import android.os.AsyncTask;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.view.View;
 
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
+import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 
 public class IRClient_NetTask extends AsyncTask<IRClient, Void, Void> {
@@ -96,6 +98,7 @@ public class IRClient_NetTask extends AsyncTask<IRClient, Void, Void> {
             int lastRead = 0;
             boolean msgComplete;
             byte[] buf = null;
+            int frameID = 0;
             recvBuf.clear();
 
             while (true) {
@@ -121,11 +124,18 @@ public class IRClient_NetTask extends AsyncTask<IRClient, Void, Void> {
                             //Log.d(IRClient.TAG, "Pipemsg: " + pipeMsg);
 
                             if (pipeMsg.contains("frame") && IRClient.getState() == IRClient.State.CLASSIFY) {
-                                buf = IRClient.frame;
+                                buf = IRClient.frameTracker.GetFrame();
+                                frameID = IRClient.frameTracker.GetID();
+
                                 //Log.d(IRClient.TAG, "Sending chunk size " + Integer.toString(buf.length));
 
                                 //String frameString = byteToHexString(buf);
                                 //Log.d(IRClient.TAG, frameString);
+                                ByteBuffer idBuff = ByteBuffer.allocate(5);
+                                idBuff.put(String.format("%04d", IRClient.frameTracker.GetID()).getBytes());
+                                idBuff.flip();
+                                msgSock.write(idBuff);
+
                                 int bytesWritten = 0;
                                 while (bytesWritten < buf.length) {
                                     //Log.d(IRClient.TAG, Boolean.toString(sWriteKey.isWritable()));
@@ -160,7 +170,8 @@ public class IRClient_NetTask extends AsyncTask<IRClient, Void, Void> {
                         }
 
                         // receive and process incoming msg
-                        else if (key.isReadable() && key == sReadKey && IRClient.getState() == IRClient.State.CLASSIFY) {
+                        if (key.isReadable() && key == sReadKey && IRClient.getState() == IRClient.State.CLASSIFY) {
+                            String recvFrameID = "0";
 
                             msgComplete = false;
                             // read new data
@@ -172,7 +183,8 @@ public class IRClient_NetTask extends AsyncTask<IRClient, Void, Void> {
 
                             //if message is complete convert to string and shift original buffer
                             if (lineEnd > 0) {
-                                recvMsg = new String(stMsg, 0, lineEnd);
+                                recvMsg = new String(stMsg, 4, lineEnd);
+                                recvFrameID = new String(stMsg, 0, 4);
                                 if (lastRead - (lineEnd + 8) >= 0) {
                                     System.arraycopy(stMsg, lineEnd + 8, stMsg, 0, lastRead - (lineEnd + 8));
                                     lastRead = lastRead - (lineEnd + 8);
@@ -187,9 +199,12 @@ public class IRClient_NetTask extends AsyncTask<IRClient, Void, Void> {
                                 msgComplete = true;
                             }
 
-                            if (msgComplete && IRClient.getState() == IRClient.State.CLASSIFY) {
+                            if (msgComplete && IRClient.getState() == IRClient.State.CLASSIFY && recvMsg.length() > 0) {
                                 long recvTime = System.currentTimeMillis();
-                                //Log.e(IRClient.TAG, "RTT: " + Long.toString(recvTime - IRClient.sendTime));
+                                //Log.e(IRClient.TAG, "Received frame ID: " + recvFrameID);
+                                //Log.e(IRClient.TAG, "RTT: " + Long.toString(recvTime - IRClient.frameTracker.GetTimeStamp(Integer.parseInt(recvFrameID))));
+
+                                IRClient.latencyView.setText(Long.toString(recvTime - IRClient.frameTracker.GetTimeStamp(Integer.parseInt(recvFrameID))) + "ms");
                                 //Log.d(IRClient.TAG, "Recieved " + Integer.toString(recvMsg.length()) + " bytes:"  + recvMsg);
                                 mainHandler.post(update_guesses);
 

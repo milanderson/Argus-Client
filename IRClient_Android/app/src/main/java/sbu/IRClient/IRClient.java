@@ -27,6 +27,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.RelativeLayout;
@@ -56,8 +58,7 @@ public class IRClient extends Activity {
 
     public static Pipe pipe;
     private static ByteBuffer signalInBuf = ByteBuffer.allocate(10);
-    public static byte[] frame = null;
-    public static long sendTime = 0;
+    public static FrameTracker frameTracker =new FrameTracker();
 
     public static IRView overlayView;
     private static SurfaceView backView;
@@ -65,11 +66,14 @@ public class IRClient extends Activity {
     private static EditText IPInput;
     private static TextView IPText;
     public static Button TLbutton, TRbutton, BRbutton, BLbutton, STbutton, OPbutton, IPbutton;
+    private static CheckBox latencyCheckBox;
+    public static TextView latencyView;
     public static ClassInputBar classInputBar;
     private static Toast toast;
     public static Context context;
     private static Camera cam;
     private static SurfaceTexture camSurface;
+    private static boolean showLatency = false;
 
     private static IRClient runningClient;
 
@@ -99,8 +103,7 @@ public class IRClient extends Activity {
     private static Camera.PreviewCallback framePasser = new Camera.PreviewCallback() {
         @Override
         public void onPreviewFrame(byte[] bytes, Camera camera) {
-            frame = bytes;
-            sendTime = System.currentTimeMillis();
+            frameTracker.SetFrame(bytes);
             try {
                 if(getState() == State.CLASSIFY) {
                     String testData = "frame";
@@ -204,6 +207,7 @@ public class IRClient extends Activity {
         texView = findViewById(R.id.textureView);
         overlayView = findViewById(R.id.overlayView);
         backView = findViewById(R.id.backView);
+        latencyView = findViewById(R.id.LatencyView);
 
         DisplayMetrics metrics = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getMetrics(metrics);
@@ -262,6 +266,15 @@ public class IRClient extends Activity {
             BLbutton = findViewById(R.id.buttonBL);
             BRbutton = findViewById(R.id.buttonBR);
 
+            latencyCheckBox = findViewById(R.id.LatencyCheckBox);
+            latencyCheckBox.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+                @Override
+                public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                    Log.e(TAG, "Show Latency: " + Boolean.toString(isChecked));
+                    showLatency = isChecked;
+                }
+            });
+
             IPInput = findViewById(R.id.inputIP);
             IPText = findViewById(R.id.optTextIP);
             IPText.setText("Current Server: " + IRClient_NetTask.SERVER_IP);
@@ -295,6 +308,7 @@ public class IRClient extends Activity {
                     };
                     try{
                         if(IPInput.getText() != null && IPInput.getText().length() > 2) {
+                            Log.d(TAG, "checking IP");
                             InetAddress IP = task.execute(IPInput.getText().toString()).get();
                             if (IP != null) {
                                 IRClient_NetTask.SERVER_IP = IPInput.getText().toString();
@@ -650,6 +664,7 @@ public class IRClient extends Activity {
             OPbutton.setVisibility(View.VISIBLE);
             runningClient.findViewById(R.id.selStart).setVisibility(View.VISIBLE);
             runningClient.findViewById(R.id.selOptions).setVisibility(View.VISIBLE);
+            latencyView.setVisibility(View.INVISIBLE);
             TRbutton.setVisibility(View.INVISIBLE);
             TRbutton.setText("Unknown");
             TLbutton.setVisibility(View.INVISIBLE);
@@ -666,6 +681,9 @@ public class IRClient extends Activity {
                 Log.d(TAG, "init Cam");
                 runningClient.initCam();
 
+                if(showLatency){
+                    latencyView.setVisibility(View.VISIBLE);
+                }
                 overlayView.setBackgroundResource(R.color.transparent);
                 backView.setVisibility(View.VISIBLE);
                 STbutton.setVisibility(View.INVISIBLE);
@@ -693,6 +711,7 @@ public class IRClient extends Activity {
         }
 
         if(state == State.RESPOND){
+            latencyView.setVisibility(View.INVISIBLE);
             Log.d(TAG, "Test");
             cam.stopPreview();
             Log.d(TAG, "Waiting for response");
