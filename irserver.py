@@ -415,12 +415,12 @@ def relay_classify_req(conn, img, frameNum, lock, replyNum, replyIndex):
 
             try:
                 lock.acquire()
-		if replyNum >= replyIndex[0]:
+                if replyNum >= replyIndex[0]:
                     conn.sendall(str(frameNum).zfill(4))
                     for guess in responses:
                         conn.sendall(guess + ",")
                     conn.sendall("RECEIVED")
-		    replyIndex[0] = replyNum
+                    replyIndex[0] = replyNum
             except Exception as e:
                 doNothing = 1
                 #print(e)
