@@ -305,15 +305,17 @@ def classify_thread(conn, filepath):
 
     conn.close()
 
-# recieve and process a stream of YUV images
+# for communication with android clients: recieve and process a stream of YUV images
 def slideshow_thread(conn, replyConn):
-    print("slideshow")
+    #print("slideshow")
     classListFile = open(CLASSLIST, "r")
-    classList = classListFile.readlines()
-    readList =[conn, replyConn]
-    lock = threading.Lock()
-    frame = None
-    byteArray = ""
+    classList = classListFile.readlines()     # the list of accepted classes from the classification/training network
+    readList =[conn, replyConn]               # a list of sockets to block on
+    lock = threading.Lock()                   # ensure that only one reply thread accesses the socket/replyIndex at a time
+    replyIndex = [0]                          # track the most recent reply (to ensure replies are sequential)
+    relplyNum = 0                             # sequentially label replies
+    frame = None                              # the image data
+    byteArray = ""                            # the raw socket data (read as a string)
     
     w = 640
     h = 480
@@ -360,8 +362,9 @@ def slideshow_thread(conn, replyConn):
                     #if cv2.waitKey(1) & 0xFF == ord('q'):
                     #    break
 
-                    t = threading.Thread(target=relay_classify_req, args=(conn, RGBMatrix, frameNum, lock))
+                    t = threading.Thread(target=relay_classify_req, args=(conn, RGBMatrix, frameNum, lock, relplyNum, replyIndex))
                     t.start()
+                    relplyNum += 1
 			
     except Exception as e:
         #print("Error recieving image.")
@@ -394,7 +397,7 @@ def train_thread(conn, filepath):
 
 # pass an image to a classifier
 # implementation will differ
-def relay_classify_req(conn, img, frameNum, lock):
+def relay_classify_req(conn, img, frameNum, lock, replyNum, replyIndex):
     ret, jpg = cv2.imencode(".jpg", img)
     responses = list()
 
@@ -412,10 +415,12 @@ def relay_classify_req(conn, img, frameNum, lock):
 
             try:
                 lock.acquire()
-                conn.sendall(str(frameNum).zfill(4))
-                for guess in responses:
-                    conn.sendall(guess + ",")
-                conn.sendall("RECEIVED")
+		if replyNum >= replyIndex[0]:
+                    conn.sendall(str(frameNum).zfill(4))
+                    for guess in responses:
+                        conn.sendall(guess + ",")
+                    conn.sendall("RECEIVED")
+		    replyIndex[0] = replyNum
             except Exception as e:
                 doNothing = 1
                 #print(e)
