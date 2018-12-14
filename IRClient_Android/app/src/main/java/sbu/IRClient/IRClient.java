@@ -5,18 +5,16 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
+import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
-import android.media.MediaRecorder;
 import android.os.AsyncTask;
-import android.os.Environment;
+import android.os.Handler;
 import android.support.constraint.ConstraintLayout;
 import android.support.v4.app.ActivityCompat;
 import android.os.Bundle;
-import android.support.v4.content.ContextCompat;
-import android.text.Layout;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -30,19 +28,18 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
-import android.widget.FrameLayout;
 import android.widget.RelativeLayout;
-import android.widget.TableRow;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.BufferedReader;
 import java.io.File;
-import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.InetAddress;
-import java.nio.ByteBuffer;
-import java.nio.channels.Pipe;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static android.os.SystemClock.sleep;
 
@@ -50,15 +47,11 @@ public class IRClient extends Activity {
     public static final String TAG = "IRClient";
     public enum State {FAILURE, RESPOND, CLASSIFY, DEFAULT, OPTIONS}
     private static State RunState = State.CLASSIFY;
+    public static Handler mainHandler;
 
     public static File mOutputFile = null;
     public static File mInitFile = null;
-    public static MediaRecorder rec;
     public static List<Long> encodeTimes = new ArrayList<>(10);
-
-    public static Pipe pipe;
-    private static ByteBuffer signalInBuf = ByteBuffer.allocate(10);
-    public static FrameTracker frameTracker =new FrameTracker();
 
     public static IRView overlayView;
     private static SurfaceView backView;
@@ -66,14 +59,16 @@ public class IRClient extends Activity {
     private static EditText IPInput;
     private static TextView IPText;
     public static Button TLbutton, TRbutton, BRbutton, BLbutton, STbutton, OPbutton, IPbutton;
-    private static CheckBox latencyCheckBox;
+    private static CheckBox latencyCheckBox, latencyCorrectionCheckBox;
     public static TextView latencyView;
     public static ClassInputBar classInputBar;
     private static Toast toast;
-    public static Context context;
     private static Camera cam;
     private static SurfaceTexture camSurface;
+    public static Context context;
+
     private static boolean showLatency = false;
+    private static boolean dropSlowPackets = false;
 
     private static IRClient runningClient;
 
@@ -85,11 +80,7 @@ public class IRClient extends Activity {
 
             try {
                 if(classInputBar.getText() != null && classInputBar.getText().length() > 1){
-                    String strMsg = "reply" + classInputBar.getText().toString() + ",";
-                    ByteBuffer msg = ByteBuffer.allocate(strMsg.getBytes().length);
-                    msg.put(strMsg.getBytes());
-                    msg.flip();
-                    pipe.sink().write(msg);
+                    NetMonitor.addReply(classInputBar.getText().toString());
                 }
             } catch (Exception e){
                 Log.e(TAG, "Error passing reply." + e.toString());
@@ -103,20 +94,7 @@ public class IRClient extends Activity {
     private static Camera.PreviewCallback framePasser = new Camera.PreviewCallback() {
         @Override
         public void onPreviewFrame(byte[] bytes, Camera camera) {
-            frameTracker.SetFrame(bytes);
-            try {
-                if(getState() == State.CLASSIFY) {
-                    String testData = "frame";
-                    signalInBuf.clear();
-                    signalInBuf.put(testData.getBytes());
-                    signalInBuf.flip();
-                    while (signalInBuf.hasRemaining()) {
-                        pipe.sink().write(signalInBuf);
-                    }
-                }
-            } catch (Exception e){
-                Log.e(TAG, "Failure Communicating with Network Thread. " + e.toString());
-            }
+            NetMonitor.addFrame(bytes);
         }
     };
 
@@ -127,6 +105,7 @@ public class IRClient extends Activity {
 
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         context = getApplicationContext();
+        mainHandler = new Handler(context.getMainLooper());
         Log.d(TAG, "Starting");
 
         checkPermissions();
@@ -135,9 +114,6 @@ public class IRClient extends Activity {
         initButtons();
         initInputBar();
         onRunStateChanged("", State.DEFAULT);
-
-        // resting
-        Log.d(TAG, "resting");
     }
 
     private void checkPermissions(){
@@ -208,6 +184,7 @@ public class IRClient extends Activity {
         overlayView = findViewById(R.id.overlayView);
         backView = findViewById(R.id.backView);
         latencyView = findViewById(R.id.LatencyView);
+        overlayView.labelView = findViewById(R.id.labelView);
 
         DisplayMetrics metrics = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getMetrics(metrics);
@@ -215,10 +192,18 @@ public class IRClient extends Activity {
         ));
         if((float)metrics.heightPixels/(float)metrics.widthPixels > 640.0/480.0){
             texView.setLayoutParams(new ConstraintLayout.LayoutParams(ViewGroup.LayoutParams.FILL_PARENT, (int)(640.0*((float)metrics.widthPixels/(float)480))));
+            overlayView.setLayoutParams(new ConstraintLayout.LayoutParams(ViewGroup.LayoutParams.FILL_PARENT, (int)(640.0*((float)metrics.widthPixels/(float)480))));
+            overlayView.labelView.setLayoutParams(new ConstraintLayout.LayoutParams(ViewGroup.LayoutParams.FILL_PARENT, (int)(640.0*((float)metrics.widthPixels/(float)480))));
             texView.setTranslationY((metrics.heightPixels - (int)(640.0*((float)metrics.widthPixels/480))) / 2);
+            overlayView.setTranslationY((metrics.heightPixels - (int)(640.0*((float)metrics.widthPixels/480))) / 2);
+            overlayView.labelView.setTranslationY((metrics.heightPixels - (int)(640.0*((float)metrics.widthPixels/480))) / 2);
         } else {
             texView.setLayoutParams(new ConstraintLayout.LayoutParams((int)(480.0*((float)metrics.heightPixels/640.0)), ViewGroup.LayoutParams.FILL_PARENT));
+            overlayView.setLayoutParams(new ConstraintLayout.LayoutParams((int)(480.0*((float)metrics.heightPixels/640.0)), ViewGroup.LayoutParams.FILL_PARENT));
+            overlayView.labelView.setLayoutParams(new ConstraintLayout.LayoutParams((int)(480.0*((float)metrics.heightPixels/640.0)), ViewGroup.LayoutParams.FILL_PARENT));
             texView.setTranslationX((metrics.widthPixels - (int)(480.0*((float)metrics.heightPixels/640.0))) / 2);
+            overlayView.setTranslationX((metrics.widthPixels - (int)(480.0*((float)metrics.heightPixels/640.0))) / 2);
+            overlayView.labelView.setTranslationX((metrics.widthPixels - (int)(480.0*((float)metrics.heightPixels/640.0))) / 2);
         }
 
         overlayView.setOnTouchListener(new View.OnTouchListener() {
@@ -227,6 +212,7 @@ public class IRClient extends Activity {
                 if(getState() == State.CLASSIFY && overlayView.setButtons((int)motionEvent.getX(), (int)motionEvent.getY())) {
                     onRunStateChanged(null, State.RESPOND);
                 } else if(getState() == State.RESPOND){
+                    Log.d(TAG, "screen touched");
                     onRunStateChanged(null, State.CLASSIFY);
                 }
                 return false;
@@ -275,9 +261,39 @@ public class IRClient extends Activity {
                 }
             });
 
+            latencyCorrectionCheckBox = findViewById(R.id.LatencyCorrectionCheckBox);
+            latencyCorrectionCheckBox.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+                @Override
+                public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                    Log.e(TAG, "drop slow responses: " + Boolean.toString(isChecked));
+                    dropSlowPackets = isChecked;
+
+                    if(dropSlowPackets) {
+                        final Handler handler = new Handler();
+                        final int delay = 500; //milliseconds
+
+                        handler.postDelayed(new Runnable() {
+                            public void run() {
+                                int x = 300000;
+                                try{
+                                    x = Integer.parseInt(latencyView.getText().toString());
+                                } catch (Exception e) {}
+                                if (x > 2500){
+                                    overlayView.clear();
+                                }
+
+                                if (dropSlowPackets) {
+                                    handler.postDelayed(this, delay);
+                                }
+                            }
+                        }, delay);
+                    }
+                }
+            });
+
             IPInput = findViewById(R.id.inputIP);
             IPText = findViewById(R.id.optTextIP);
-            IPText.setText("Current Server: " + IRClient_NetTask.SERVER_IP);
+            IPText.setText("Current Server:  " + Net_ClassRequester.SERVER_IP);
             overlayView.setGuesses("");
 
             findViewById(R.id.buttonOptRet).setOnClickListener(new View.OnClickListener() {
@@ -296,6 +312,13 @@ public class IRClient extends Activity {
                 public void onClick(View v) {
                     InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
                     imm.hideSoftInputFromWindow(IPInput.getWindowToken(), 0);
+
+                    String urlStr = IPInput.getText().toString();
+                    if(urlStr.indexOf("http://") != 0){
+                        urlStr = "http://" + urlStr;
+                    }
+                    Net_ClassRequester.SERVER_IP = urlStr;
+
                     AsyncTask<String, Void, InetAddress> task = new AsyncTask<String, Void, InetAddress>() {
                         @Override
                         protected InetAddress doInBackground(String... params){
@@ -306,20 +329,20 @@ public class IRClient extends Activity {
                             }
                         }
                     };
+
                     try{
-                        if(IPInput.getText() != null && IPInput.getText().length() > 2) {
-                            Log.d(TAG, "checking IP");
-                            InetAddress IP = task.execute(IPInput.getText().toString()).get();
+                        if(urlStr != null && urlStr.length() > 2) {
+                            Log.d(TAG, "checking URL");
+                            InetAddress IP = task.execute(urlStr).get();
+                            IPText.setText("Current Server: " + urlStr);
                             if (IP != null) {
-                                IRClient_NetTask.SERVER_IP = IPInput.getText().toString();
-                                IPText.setText("Current Server: " + IP.toString());
+                                //Net_ClassRequester.SERVER_IP = urlStr;
                             } else {
-                                Log.e(TAG, "Search for: " + IPInput.getText().toString());
                                 onRunStateChanged("Unknown host", State.OPTIONS);
                             }
                         }
                     } catch (Exception e){
-                        Log.e(TAG, e.toString());
+                        Log.e(TAG, "Error finding server: " + e.toString());
                     }
                 }
             });
@@ -359,21 +382,18 @@ public class IRClient extends Activity {
                                 return;
                             }
 
-                            String strMsg = "reply" + TLbutton.getText().toString() + ",";
-                            ByteBuffer msg = ByteBuffer.allocate(strMsg.getBytes().length);
-                            msg.put(strMsg.getBytes());
-                            msg.flip();
-                            pipe.sink().write(msg);
+                            NetMonitor.addReply(TLbutton.getText().toString());
                         } catch (Exception e) {
                             Log.e(TAG, "Error clicking button." + e.toString());
                         }
-                        onRunStateChanged(null, State.RESPOND);
+                        onRunStateChanged(null, State.CLASSIFY);
                     }
                 }
             });
             TRbutton.setOnClickListener(new View.OnClickListener(){
                 @Override
                 public void onClick(View v) {
+                    Log.e(TAG, "button 2");
 
                     if (getState() == State.RESPOND && TRbutton.getVisibility() == View.VISIBLE) {
                         try {
@@ -389,21 +409,18 @@ public class IRClient extends Activity {
                                 return;
                             }
 
-                            String strMsg = "reply" + TRbutton.getText().toString() + ",";
-                            ByteBuffer msg = ByteBuffer.allocate(strMsg.getBytes().length);
-                            msg.put(strMsg.getBytes());
-                            msg.flip();
-                            pipe.sink().write(msg);
+                            NetMonitor.addReply(TRbutton.getText().toString());
                         } catch (Exception e) {
                             Log.e(TAG, "Error clicking button." + e.toString());
                         }
-                        onRunStateChanged(null, State.RESPOND);
+                        onRunStateChanged(null, State.CLASSIFY);
                     }
                 }
             });
             BLbutton.setOnClickListener(new View.OnClickListener(){
                 @Override
                 public void onClick(View v) {
+                    Log.e(TAG, "button 3");
 
                     if (getState() == State.RESPOND && BLbutton.getVisibility() == View.VISIBLE) {
                         try {
@@ -419,21 +436,18 @@ public class IRClient extends Activity {
                                 return;
                             }
 
-                            String strMsg = "reply" + BLbutton.getText().toString() + ",";
-                            ByteBuffer msg = ByteBuffer.allocate(strMsg.getBytes().length);
-                            msg.put(strMsg.getBytes());
-                            msg.flip();
-                            pipe.sink().write(msg);
+                            NetMonitor.addReply(BLbutton.getText().toString());
                         } catch (Exception e) {
                             Log.e(TAG, "Error clicking button." + e.toString());
                         }
-                        onRunStateChanged(null, State.RESPOND);
+                        onRunStateChanged(null, State.CLASSIFY);
                     }
                 }
             });
             BRbutton.setOnClickListener(new View.OnClickListener(){
                 @Override
                 public void onClick(View v) {
+                    Log.e(TAG, "button 4");
 
                     if(getState() == State.RESPOND && BRbutton.getVisibility() == View.VISIBLE) {
                         try {
@@ -448,16 +462,11 @@ public class IRClient extends Activity {
 
                                 return;
                             }
-
-                            String strMsg = "reply" + BRbutton.getText().toString() + ",";
-                            ByteBuffer msg = ByteBuffer.allocate(strMsg.getBytes().length);
-                            msg.put(strMsg.getBytes());
-                            msg.flip();
-                            pipe.sink().write(msg);
+                            NetMonitor.addReply(BRbutton.getText().toString());
                         } catch (Exception e) {
                             Log.e(TAG, "Error clicking button." + e.toString());
                         }
-                        onRunStateChanged(null, State.RESPOND);
+                        onRunStateChanged(null, State.CLASSIFY);
                     }
                 }
             });
@@ -485,6 +494,7 @@ public class IRClient extends Activity {
             }
             Camera.Parameters param = cam.getParameters();
             param.setPreviewSize(width, height);
+            param.setPreviewFormat(ImageFormat.YV12);
             Log.e(TAG, "Picture format " + param.getPreviewFormat());
 
             cam.setParameters(param);
@@ -492,85 +502,225 @@ public class IRClient extends Activity {
 
             cam.setPreviewTexture(camSurface);
             cam.startPreview();
-
-            pipe = Pipe.open();
-            pipe.source().configureBlocking(false);
-            pipe.sink().configureBlocking(false);
-            new IRClient_NetTask().execute(this);
-
-            toast = Toast.makeText(context, "Connecting...", Toast.LENGTH_SHORT);
-            toast.show();
         } catch (Exception e){
             Log.e(TAG, "Error initializing camera: " + e.toString());
         }
     }
 
-    private void initRecorder(String fname){
-        try {
-            rec = new MediaRecorder();
-            cam.unlock();
-            rec.setCamera(cam);
+    public static class NetMonitor {
+        public static int MSGSIZE = 10000;
+        private static ReentrantLock frontToBackLock = new ReentrantLock();
+        private static ReentrantLock reqToReadLock = new ReentrantLock();
+        private static ReentrantLock maskWriteLock = new ReentrantLock();
+        private static ReentrantLock rectWriteLock = new ReentrantLock();
+        private static boolean replyReady = false;
+        private static boolean frameReady = false;
+        private static String netReply;
+        private static InputStream respConn = null;
+        private static FrameTracker frameTracker =new FrameTracker();
+        private static boolean NetStatusOK = false;
+        private static final Object sendLock = new Object();
+        private static final Object readLock = new Object();
+        private static Net_ClassRequester classRequester;
+        private static Net_RespReader respReader;
+        private static ArrayList<String> rawMasks = new ArrayList<String>();
+        private static ArrayList<String> rectLists = new ArrayList<>();
+        private static long frameUpdateInterval = 0;
 
-            rec.setVideoSource(MediaRecorder.VideoSource.CAMERA);
-
-            rec.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-            rec.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
-
-            rec.setVideoSize(640, 480);
-            rec.setVideoFrameRate(30);
-
-        } catch (Exception e){
-            Log.e(TAG, "Error initializing recorder: " + e.toString());
+        public static void startRequestThread(){
+            classRequester = new Net_ClassRequester();
+            classRequester.start();
         }
 
-        //Create and thread output file
-        try {
-            if(fname == "Init") {
-                mInitFile = File.createTempFile("IRClient_tmp", null, getApplicationContext().getCacheDir());
-                //initSaveFile();
+        public static void startResponseThread(){
+            respReader = new Net_RespReader();
+            respReader.start();
+        }
 
-                rec.setOutputFile(mInitFile.getPath());
-            } else {
-                mOutputFile = File.createTempFile("IRClient_tmp", null, getApplicationContext().getCacheDir());
-                //initSaveFile();
+        public static void setNetStatusOK(){
+            NetStatusOK = true;
+        }
 
-                rec.setOutputFile(mOutputFile.getPath());
+        public static boolean isNetStatusOK(){
+            return NetStatusOK;
+        }
+
+        public static void startNetExit(String exitMsg){
+            final String netExitMsg = exitMsg;
+
+            Runnable NETEXIT = new Runnable(){
+                @Override
+                public void run() {
+                    NetStatusOK = false;
+                    if(classRequester != null && classRequester.isAlive()){
+                        classRequester.interrupt();
+                    }
+                    if(respReader != null && respReader.isAlive()){
+                        respReader.interrupt();
+                    }
+                    onRunStateChanged(netExitMsg, State.DEFAULT);
+
+                    frontToBackLock.lock();
+                    frameTracker.Reset();
+                    frameReady = false;
+                    replyReady = false;
+                    frontToBackLock.unlock();
+                }
+            };
+            mainHandler.post(NETEXIT);
+        }
+
+        public static void awaitSendTask(){
+            if(!frameReady && !replyReady) {
+                try {
+                    synchronized (sendLock) {
+                        sendLock.wait();
+                    }
+                } catch (InterruptedException e) {
+                }
             }
-
-        } catch (Exception e) { Log.e(TAG, e.toString()); }
-
-        try {
-            rec.prepare();
-        } catch (IllegalStateException e) {
-            Log.d(TAG, "IllegalStateException preparing MediaRecorder: " + e.getMessage());
-            rec.reset();
-            rec.release();
-            return;
-        } catch (IOException e) {
-            Log.d(TAG, "IOException preparing MediaRecorder: " + e.getMessage());
-            rec.reset();
-            rec.release();
-            return;
         }
 
-        try{
-            rec.start();
-        } catch (Exception e) {
-            Log.e(TAG, e.toString());
+        public static void awaitReadTask(){
+            if(respConn == null) {
+                try {
+                    synchronized (readLock) {
+                        readLock.wait();
+                    }
+                } catch (InterruptedException e) {
+                }
+            }
         }
+
+        public static void addResponseConn(InputStream conn){
+            reqToReadLock.lock();
+            if(respConn != null){
+                //respConn.disconnect();
+            }
+            respConn = conn;
+            reqToReadLock.unlock();
+
+            synchronized(readLock) {
+                readLock.notify();
+            }
+        }
+
+        public static InputStream getResponseConn(){
+            reqToReadLock.lock();
+            InputStream retConn = respConn;
+            respConn = null;
+            reqToReadLock.unlock();
+
+            return retConn;
+        }
+
+        public static void clearRects(){
+            rectWriteLock.lock();
+            rectLists.clear();
+            rectWriteLock.unlock();
+        }
+
+        public static void addRectList(String rectList){
+            rectLists.add(rectList);
+        }
+
+        public static ArrayList<String> openRects(){
+            rectWriteLock.lock();
+            return rectLists;
+        }
+
+        public static void closeRects(){
+            rectWriteLock.unlock();
+        }
+
+        public static void clearMasks(){
+            maskWriteLock.lock();
+            rawMasks.clear();
+            maskWriteLock.unlock();
+        }
+
+        public static void addMask(String rawMask){
+            rawMasks.add(rawMask);
+        }
+
+        public static ArrayList<String> openMasks(){
+            maskWriteLock.lock();
+            return rawMasks;
+        }
+
+        public static void closeMasks(){
+            maskWriteLock.unlock();
+        }
+
+        public static void addReply (String reply){
+            if(getState() == State.CLASSIFY || getState() == State.RESPOND) {
+                frontToBackLock.lock();
+                netReply = reply;
+                replyReady = true;
+                frontToBackLock.unlock();
+
+                synchronized(sendLock) {
+                    sendLock.notifyAll();
+                }
+            }
+        }
+
+        public static String getReply(){
+            String reply = null;
+            frontToBackLock.lock();
+            if(replyReady) {
+                reply = netReply;
+                replyReady = false;
+            }
+            frontToBackLock.unlock();
+            return reply;
+        }
+
+        public static void addFrame ( byte[] frame){
+
+            if(getState() == State.CLASSIFY || getState() == State.RESPOND) {
+                if(System.currentTimeMillis() - frameUpdateInterval > 5000) {
+                    frontToBackLock.lock();
+                    frameTracker.SetFrame(frame);
+                    frameReady = true;
+                    frameUpdateInterval = System.currentTimeMillis();
+                    frontToBackLock.unlock();
+
+                    synchronized (sendLock) {
+                        sendLock.notifyAll();
+                    }
+                }
+            }
+        }
+
+        public static Frame getFrame() {
+            Frame retFrame = null;
+            frontToBackLock.lock();
+            if(frameReady) {
+                retFrame = frameTracker.GetFrame();
+                frameReady = false;
+            }
+            frontToBackLock.unlock();
+            return retFrame;
+        }
+
+        public static long getFrameTimeStamp(int fID){
+            long retTime;
+            frontToBackLock.lock();
+            retTime = frameTracker.GetTimeStamp(fID);
+            frontToBackLock.unlock();
+            return retTime;
+        }
+
     }
 
-    private void initSaveFile(){
-        File saveDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "CameraSample");
-
-        if (! saveDir.exists()) {
-            if (!saveDir.mkdirs()) {
-                Log.d(TAG, "failed to create directory");
-                return;
-            }
+    @Override
+    public void onBackPressed() {
+        if(getState() == State.RESPOND){
+            onRunStateChanged("", State.CLASSIFY);
+        } else if (getState() == State.CLASSIFY || getState() == State.OPTIONS){
+            onRunStateChanged("", State.DEFAULT);
         }
-
-        mOutputFile = new File(saveDir.getPath() + File.separator + "IRClient_tmp.mp4");
     }
 
     @Override
@@ -595,7 +745,7 @@ public class IRClient extends Activity {
                 cam.setDisplayOrientation(90);
             }
         } catch (Exception e){
-            Log.e(TAG, e.toString());
+            Log.e(TAG, "Error setting orientation: " + e.toString());
         }
     }
 
@@ -604,12 +754,7 @@ public class IRClient extends Activity {
         super.onPause();
         try {
             if(getState() == State.CLASSIFY || getState() == State.RESPOND) {
-                signalInBuf.clear();
-                signalInBuf.put("NETEXIT".getBytes());
-                signalInBuf.flip();
-                while (signalInBuf.hasRemaining()) {
-                    pipe.sink().write(signalInBuf);
-                }
+                NetMonitor.startNetExit(null);
             }
         } catch (Exception e) {
             Log.d(TAG, "Error pausing." + e.toString());
@@ -620,6 +765,27 @@ public class IRClient extends Activity {
 
     @Override
     public void onResume(){
+        if(dropSlowPackets) {
+            final Handler handler = new Handler();
+            final int delay = 500; //milliseconds
+
+            handler.postDelayed(new Runnable() {
+                public void run() {
+                    int x = 30000;
+                    try {
+                        x = Integer.parseInt(latencyView.getText().toString());
+                    } catch (Exception e){}
+                    if (x > 2500){
+                        overlayView.clear();
+                    }
+
+                    if (dropSlowPackets) {
+                        handler.postDelayed(this, delay);
+                    }
+                }
+            }, delay);
+        }
+
         super.onResume();
     }
 
@@ -653,6 +819,9 @@ public class IRClient extends Activity {
                     cam.release();
                     cam = null;
                 }
+                if(NetMonitor.isNetStatusOK()){
+                    NetMonitor.startNetExit("");
+                }
             } catch (Exception e){
 
             }
@@ -666,9 +835,9 @@ public class IRClient extends Activity {
             runningClient.findViewById(R.id.selOptions).setVisibility(View.VISIBLE);
             latencyView.setVisibility(View.INVISIBLE);
             TRbutton.setVisibility(View.INVISIBLE);
-            TRbutton.setText("Unknown");
+            TRbutton.setText("");
             TLbutton.setVisibility(View.INVISIBLE);
-            TLbutton.setText("");
+            TLbutton.setText("Unknown");
             BRbutton.setVisibility(View.INVISIBLE);
             BRbutton.setText("");
             BLbutton.setVisibility(View.INVISIBLE);
@@ -680,6 +849,10 @@ public class IRClient extends Activity {
             if(getState() != State.CLASSIFY && getState() != State.RESPOND) {
                 Log.d(TAG, "init Cam");
                 runningClient.initCam();
+
+                toast = Toast.makeText(context, "Connecting, Please Wait", Toast.LENGTH_SHORT);
+                toast.show();
+                NetMonitor.startRequestThread();
 
                 if(showLatency){
                     latencyView.setVisibility(View.VISIBLE);
@@ -698,7 +871,13 @@ public class IRClient extends Activity {
             }
             if(RunState == State.RESPOND){
                 Log.d(TAG, "Resuming classification mode");
+                overlayView.showGuesses();
+                overlayView.refresh();
                 classInputBar.setVisibility(View.INVISIBLE);
+                TRbutton.setVisibility(View.INVISIBLE);
+                TLbutton.setVisibility(View.INVISIBLE);
+                BRbutton.setVisibility(View.INVISIBLE);
+                BLbutton.setVisibility(View.INVISIBLE);
                 cam.setPreviewCallback(framePasser);
                 cam.startPreview();
             }
@@ -711,10 +890,12 @@ public class IRClient extends Activity {
         }
 
         if(state == State.RESPOND){
-            latencyView.setVisibility(View.INVISIBLE);
-            Log.d(TAG, "Test");
-            cam.stopPreview();
             Log.d(TAG, "Waiting for response");
+            overlayView.hideGuesses();
+            overlayView.refresh();
+            cam.stopPreview();
+
+            Log.d(TAG, "moving on");
         }
 
         RunState = state;

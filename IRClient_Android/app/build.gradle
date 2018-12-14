@@ -6,14 +6,19 @@ android {
         applicationId "sbu.IRClient"
         minSdkVersion 21
         targetSdkVersion 27
-        versionCode 5
-        versionName "1.4"
+        versionCode 7
+        versionName "1.5"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
         externalNativeBuild {
             cmake {
                 cppFlags ""
             }
         }
+
+        //ndk {
+        //    abiFilters "armeabi-v7a"
+        //    abiFilters "arm64-v8a"
+        //}
     }
     buildTypes {
         release {
@@ -27,6 +32,12 @@ android {
         }
     }
 }
+
+//repositories {
+//    flatDir {
+//        dirs 'jniLibs'
+//    }
+//}
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])

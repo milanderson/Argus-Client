@@ -18,6 +18,12 @@
         android:layout_height="wrap_content"
         android:elevation="0dp"
         android:layout_centerInParent="true" />
+    <RelativeLayout
+        android:id="@+id/labelView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:elevation="0dp"
+        ></RelativeLayout>
     <SurfaceView
         android:id="@+id/backView"
         android:layout_width="wrap_content"
@@ -48,6 +54,7 @@
                         android:textSize="18dp"
                         android:gravity="center|bottom"
                         android:visibility="visible"
+                        android:alpha="1.0"
                         android:elevation="0dp"/>
                     <ImageView
                         android:layout_width="100dp"
@@ -72,6 +79,7 @@
                     android:textSize="18dp"
                     android:gravity="center|bottom"
                     android:visibility="visible"
+                    android:alpha="1.0"
                     android:elevation="0dp"/>
                 <ImageView
                     android:layout_width="100dp"
@@ -90,21 +98,30 @@
         android:layout_width="fill_parent"
         android:layout_height="fill_parent"
         android:elevation="2dp"
-        android:stretchColumns="*"
         android:visibility="invisible">
         <TableRow
             android:layout_marginTop="20dp">
-            <EditText
-                android:id="@+id/inputIP"
+            <TableLayout
+                xmlns:android="http://schemas.android.com/apk/res/android"
+                xmlns:tools="http://schemas.android.com/tools"
                 android:layout_width="fill_parent"
-                android:layout_height="wrap_content"
-                android:hint="Enter Server IP Address"
-                android:inputType="text|textAutoCorrect" />
-            <Button
-                android:id="@+id/buttonIP"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:text="Set Server"/>
+                android:layout_height="fill_parent"
+                android:shrinkColumns="*">
+                <TableRow>
+                    <EditText
+                        android:id="@+id/inputIP"
+                        android:layout_width="fill_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Enter Server IP Address               "
+                        android:inputType="text|textAutoCorrect"
+                        android:textSize="16dp"/>
+                    <Button
+                        android:id="@+id/buttonIP"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:text="  Set Server  "/>
+                </TableRow>
+            </TableLayout>
         </TableRow>
         <TableRow
             android:layout_marginLeft="4dp">
@@ -112,22 +129,40 @@
                 android:id="@+id/optTextIP"
                 android:layout_height="wrap_content"
                 android:layout_width="wrap_content"
-                android:text=""/>
+                android:text="Current Server:                                             ."/>
         </TableRow>
         <TableRow
             android:layout_marginTop="20dp">
             <CheckBox
                 android:id="@+id/LatencyCheckBox"
                 android:layout_width="wrap_content"
-                android:text="Show Latency"/>
+                android:text="Show Latency"
+                android:textSize="16dp"/>
         </TableRow>
         <TableRow
             android:layout_marginTop="20dp">
-            <Button
-                android:id="@+id/buttonOptRet"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:text="Back"/>
+            <CheckBox
+                android:id="@+id/LatencyCorrectionCheckBox"
+                android:layout_width="wrap_content"
+                android:text="Drop Slow Responses"
+                android:textSize="16dp"/>
+        </TableRow>
+        <TableRow
+            android:layout_marginTop="20dp">
+            <TableLayout
+                xmlns:android="http://schemas.android.com/apk/res/android"
+                xmlns:tools="http://schemas.android.com/tools"
+                android:layout_width="fill_parent"
+                android:layout_height="fill_parent"
+                android:shrinkColumns="*">
+                <TableRow>
+                    <Button
+                        android:id="@+id/buttonOptRet"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:text="  Back  "/>
+                </TableRow>
+            </TableLayout>
         </TableRow>
     </TableLayout>
 
@@ -136,6 +171,7 @@
         android:layout_width="fill_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentTop="true"
+        android:elevation="2dp"
         android:gravity="center"
         android:hint="Enter Correct Class"
         android:background="@layout/inputbar"
@@ -145,6 +181,7 @@
     <TableLayout
         android:layout_width="fill_parent"
         android:layout_height="match_parent"
+        android:elevation="2dp"
         android:gravity="bottom|center"
         android:stretchColumns="*"
         android:layout_alignParentBottom="true">
@@ -160,8 +197,8 @@
                     android:layout_weight="0.5"
                     android:text="Unknown"
                     android:visibility="invisible"
-                    tools:layout_editor_absoluteX="0dp"
-                    tools:layout_editor_absoluteY="408dp" />
+                    android:alpha="1.0"
+                    android:elevation="10dp" />
 
                 <Button
                     android:id="@+id/buttonTR"
@@ -170,8 +207,8 @@
                     android:layout_weight="0.5"
                     android:text=""
                     android:visibility="invisible"
-                    tools:layout_editor_absoluteX="194dp"
-                    tools:layout_editor_absoluteY="408dp" />
+                    android:alpha="1.0"
+                    android:elevation="10dp"/>
             </LinearLayout>
         </TableRow>
         <TableRow>
@@ -186,8 +223,8 @@
                     android:layout_weight="0.5"
                     android:text=""
                     android:visibility="invisible"
-                    tools:layout_editor_absoluteX="0dp"
-                    tools:layout_editor_absoluteY="459dp" />
+                    android:alpha="1.0"
+                    android:elevation="10dp" />
                 <Button
                     android:id="@+id/buttonBR"
                     android:layout_width="0dp"
@@ -195,8 +232,8 @@
                     android:layout_weight="0.5"
                     android:text=""
                     android:visibility="invisible"
-                    tools:layout_editor_absoluteX="194dp"
-                    tools:layout_editor_absoluteY="460dp" />
+                    android:alpha="1.0"
+                    android:elevation="10dp" />
             </LinearLayout>
         </TableRow>
     </TableLayout>

@@ -1,28 +1,34 @@
 package sbu.IRClient;
 
+import android.util.Log;
+
 public class FrameTracker {
-    private byte[] frame;
+    private Frame frame = new Frame();
     private long[] timeStamps = new long[256];
-    private int index = 0;
 
     public FrameTracker(){
+        frame.fID = 0;
     }
 
-    public byte[] GetFrame(){
+    public Frame GetFrame(){
         return frame;
     }
 
     public void SetFrame(byte[] bytes){
-        frame = bytes;
-        timeStamps[index] = System.currentTimeMillis();
-        index = (index + 1)%256;
-    }
-
-    public int GetID(){
-        return index;
+        frame.bytes = bytes;
+        timeStamps[frame.fID] = System.currentTimeMillis();
+        frame.fID = (frame.fID + 1)%256;
     }
 
     public long GetTimeStamp(int i){
         return timeStamps[i];
+    }
+
+    public void Reset(){
+        for(int i = 0; i < timeStamps.length; i ++){
+            timeStamps[i] = 0;
+        }
+        frame.bytes = null;
+        frame.fID = 0;
     }
 }

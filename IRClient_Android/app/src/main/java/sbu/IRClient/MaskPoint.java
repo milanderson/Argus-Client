@@ -53,6 +53,10 @@ public class MaskPoint {
         this.visited ++;
     }
 
+    public void ResetVisits(){
+        this.visited = 0;
+    }
+
     public int VisitCount(){
         return this.visited;
     }

@@ -9,9 +9,7 @@ from random import *
 import numpy as np
 import cv2
 
-REFUSE_IR_REQ = "Request not recognized. Valid requests are Train|Classify"
-IR_REQ_ST = 'Stream'
-IR_REQ_MP4ST = 'MP4Stream'
+REFUSE_IR_REQ = "Request not recognized."
 IR_REQ_TR = 'Train'
 IR_REQ_CL = 'Classify'
 IR_REQ_SS = 'Slideshow'
@@ -56,7 +54,7 @@ class IRDispatcher(Daemon):
         self.fileID = 0
         HOST = ''
         PORT = 50505
-
+        
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.bind((SERVER_IP, 50505))
@@ -89,18 +87,18 @@ class IRDispatcher(Daemon):
 		    	t.start()
 
 		except Exception as e:
-		    #print("Error accepting reply socket.")
-		    #print(e)
+		    print("Error accepting reply socket.")
+		    print(e)
 		    continue
 		
             if s in readable:
 	        try:
                     conn, addr = s.accept()
                     data = conn.recv(1024)
-                    #print(data)
+                    print(data)
                 except Exception as e:
-                    #print("Accept and connect failure.")
-                    #print(e)
+                    print("Accept and connect failure.")
+                    print(e)
                     continue
 		
                 if IR_REQ_TR in data:
@@ -111,18 +109,10 @@ class IRDispatcher(Daemon):
                     path = self.next_filename()
                     t = threading.Thread(target=classify_thread, args=(conn, path))
                     t.start()
-                elif IR_REQ_ST in data:
-                    path = self.next_filename('avi')
-                    t = threading.Thread(target=stream_thread, args=(conn, path))
-                    t.start()
                 elif IR_REQ_SS in data:
                     connList.append(conn)
                     if len(connList) > 10:
                         connList.pop(0).close()
-                elif IR_REQ_MP4ST in data:
-                    path = self.next_filename()
-                    t = threading.Thread(target=mp4stream_thread, args=(conn, path))
-                    t.start()
                 else:
                     try:
                         conn.sendall(REFUSE_IR_REQ)
@@ -131,178 +121,31 @@ class IRDispatcher(Daemon):
                         #print("Refusing connection.")
                         #print(e)
                         continue
-
-def mp4stream_thread(conn, filepath):
-
-    class ReadState(Enum):
-        PPSSEARCH = 0
-        FRAMESEARCH = 1
-        FRAMEREAD = 2
-
-    print("mp4stream")
-    f = open(filepath, 'wb+')
-    cap = cv2.VideoCapture(filepath)
-    print(cap.isOpened)
-    state = ReadState.PPSSEARCH
-
-    try:
-        OOBsInit = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        OOBsInit.bind((SERVER_IP, 50506))
-        OOBs_info = OOBsInit.getsockname()
-        OOBsInit.listen(3)
-
-        print(OOBs_info[1])
-        conn.sendall(str(OOBs_info[1]))
-        OOBs, addr = OOBsInit.accept()
-        conn.sendall(IR_READY)
-    except Exception as e:
-        print("Error creating communication socket")
-        print(e)
-        exit()    # save incoming video file
-        
-    print("reading incoming file")
-    frameSize = 0
-    try:
-        while True:
-            msg = OOBs.recv()
-
-            if state == ReadState.PPSSEARCH:
-                if msg.find("avc") >= 0:
-                    msg = msg[msg.find(b'\x76\x63\x31'):]
-                    msg = msg[msg.find(b'\x42\x80'):]
-                    PPS = msg[:msg.find(b'\x01\x00\04')]
-                    SPS = msg[msg.find(b'\x01\x00\04\x68') + 3:msg.find(b'\x01\x00\04\x68') + 7]
-                    f.write(b'\x00\x00\x00\x01')
-                    f.write(PPS)
-                    f.write(b'\x00\x00\x00\x01')
-                    f.write(SPS)
-                    state = ReadState.FRAMESEARCH
-            if state == ReadState.FRAMESEARCH:
-                if "mdat" in msg:
-                    msg = msg[msg.find("mdat") + 4:]
-                    state = ReadState.FRAMEREAD
-
-            if state == ReadState.FRAMEREAD:
-                #TODO get next frame
-                if frameSize == 0:
-                    f.write(b'\x00\x00\x00\x01')
-                    framesize = (ord(msg[0]) << 24) + (ord(msg[1]) << 16) + (ord(msg[2]) << 8) + (ord(msg[3]))
-                    msg = msg[4:]
-
-                    ret, frame = cap.read()
-                    if ret:
-                        try:
-                            cv2.imshow('frame',frame)
-                            if cv2.waitKey(1) & 0xFF == ord('q'):
-                                break
-                        except Exception as e:
-                            fCount = fCount
-
-                else:
-                    writeAmount = min(frameSize, len(msg))
-                    f.write(msg[:writeAmount])
-                    frameSize -= writeAmount
-
-    except Exception as e:
-        print("Error recieving image.")
-        print(e)
-        f.close()
-        cap.release()
-
-    conn.close()
-
-# recieve H264 encoded stream and save as AVI
-def stream_thread(conn, filepath):
-    print("stream")
-    print(filepath)
-    f = open(filepath, 'wb+')
-    cap = cv2.VideoCapture(filepath)
-    print(cap.isOpened)
-    try:
-        OOBsInit = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        OOBsInit.bind((SERVER_IP, 50506))
-        OOBs_info = OOBsInit.getsockname()
-        OOBsInit.listen(3)
-
-        print(OOBs_info[1])
-        conn.sendall(str(OOBs_info[1]))
-        OOBs, addr = OOBsInit.accept()
-        conn.sendall(IR_READY)
-    except Exception as e:
-        print("Error creating communication socket")
-        print(e)
-        exit()
-
-    readset = [conn, OOBs]
-    writeset = []
-    errset = []
-
-    # save incoming video file
-    print("reading incoming file")
-    fCount = 0
-    try:
-        while True:
-            readable, writable, erronious = select.select(readset, writeset, errset)
-            if OOBs in readable:
-                msg = OOBs.recv(1024)
-                print(msg)
-                if "DONE" in msg:
-                    break
-
-                OOBs.sendall("RECEIVED")
-            if conn in readable:
-                data = conn.recv(1024)
-                f.write(data)
-
-                #if fCount < 3:
-                #    fCount += 1
-                #else:
-                #    ret, frame = cap.read()
-                #    if ret:
-                #        try:
-                #            cv2.imshow('frame',frame)
-                #            if cv2.waitKey(1) & 0xFF == ord('q'):
-                #                break
-                #        except Exception as e:
-                #            fCount = fCount
-
-    except Exception as e:
-        print("Error recieving image.")
-        print(e)
-        f.close()
-        cap.release()
-
-    conn.close()
                     
-# recieve and process an image training request
-def classify_thread(conn, filepath):
-    f = open(filepath, 'wb+')
+# pototype method for recieving and processing an image training request
+def classify_thread(conn):
 
-    # save incoming image file
+    data = ""
     try:
         conn.sendall(IR_READY)
         while True:
-            data = conn.recv(1024)
+            data += conn.recv(1024)
             if not data or "Done" in data:
                 if len(data) > 4:
-                    f.write(data[0:len(data) - 6])
+                    data = data[0:len(data) - 6]
                 break
-            f.write(data)
-        f.close()
         conn.sendall("RECEIVED")
     except Exception as e:
         print("Error recieving image.")
         print(e)
-        f.close()
         conn.close()
         return
 
     # pass image to classifier
-    prediction = relay_classify_req(filepath)
-    if prediction is None:
-        prediction = "Undefined"
+    prediction = relay_classify_req(data)
+    if prediction is None or prediction is "":
+        prediction = "Unknown"
     conn.sendall(prediction)
-
     conn.close()
 
 # recieve and process a stream of YUV images
@@ -330,21 +173,21 @@ def slideshow_thread(conn, replyConn):
                 if frameClass == '':
                     raise ValueError('Failed to read reply socket.')
 
-                #print("reply: ", frameClass)
+                print("reply: ", frameClass)
 		
                 classNum = 0
-                while re.search(frameClass, classList[classNum], re.I) is None and classNum < len(classList):
-                    classNum += 1
-                if classNum < len(classList):
-                    RGBMatrix = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_NV21)
-                    t = threading.Thread(target=relay_train_req, args=(str(classNum).zfill(4), RGBMatrix))
-                    t.start()
+                #while re.search(frameClass, classList[classNum], re.I) is None and classNum < len(classList):
+                #    classNum += 1
+                #if classNum < len(classList):
+                #    RGBMatrix = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_NV21)
+                    #t = threading.Thread(target=relay_train_req, args=(str(classNum).zfill(4), RGBMatrix))
+                    #t.start()
 
             if conn in readable:
                 byteArray = byteArray + conn.recv(460804)
 
                 if len(byteArray) > 460804:
-                    #print("full frame")
+                    print("full frame")
                 
                     frameNum = int(byteArray[:4])
 
@@ -360,18 +203,18 @@ def slideshow_thread(conn, replyConn):
                     #if cv2.waitKey(1) & 0xFF == ord('q'):
                     #    break
 
-                    t = threading.Thread(target=relay_classify_req, args=(conn, RGBMatrix, frameNum, lock))
+                    t = threading.Thread(target=relay_classify_req_thread, args=(conn, RGBMatrix, frameNum, lock))
                     t.start()
 			
     except Exception as e:
-        #print("Error recieving image.")
-        #print(e)
+        print("Error recieving image.")
+        print(e)
         conn.close()
         return
 
     conn.close()
 
-# recieve and process an image classification request
+# recieve and process an image training request
 def train_thread(conn, filepath):
     f = open(filepath, 'wb+')
 
@@ -394,21 +237,24 @@ def train_thread(conn, filepath):
 
 # pass an image to a classifier
 # implementation will differ
-def relay_classify_req(conn, img, frameNum, lock):
+def relay_classify_req():
+    prediction = ""
+    return prediction
+
+# asynchronously pass an image to a classifier
+# implementation will differ
+def relay_classify_req_thread(conn, img, frameNum, lock):
     ret, jpg = cv2.imencode(".jpg", img)
     responses = list()
 
+    print("classifying")
     try:
-        r = requests.post(GPU_SERV_CLASS_ADDR, jpg.tostring())
-        if r.status_code == 200:
-            data = r.json()
+        #r = requests.post(GPU_SERV_CLASS_ADDR, jpg.tostring())
+        if True: #r.status_code == 200:
+            #data = r.json()
     
-            for i in range(min(len(data), 3)):
-                endPt = data[i]['label'].find(",")
-                if endPt == -1:
-                    endPt = len(data[i]['label'])
-
-                responses.append(data[i]['label'][10:endPt])
+            for i in range(3):
+                responses.append("testing")
 
             try:
                 lock.acquire()
@@ -423,7 +269,7 @@ def relay_classify_req(conn, img, frameNum, lock):
                 lock.release()
     except Exception as e:
         doNothing = 1
-        #print(e)
+        print(e)
 
     return responses
 
@@ -448,11 +294,7 @@ def YUVtoRGB(filename):
     RGBMatrix = cv2.cvtColor(byteArray, cv2.COLOR_YUV2BGR_NV21)
     return RGBMatrix
 
-# pass an image to a classifier
-def relay_frame_classify_req(frame):
-    return Boxify.boxify(frame)
-
 # init daemon
 if __name__ == "__main__":
     daemon = IRDispatcher('/tmp/IRDispatcher.pid')
-    daemon.start()
+    daemon.run()
