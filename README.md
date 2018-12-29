@@ -1,4 +1,4 @@
-# IR-Server
+# Argus Client
 A client server model for processing image recognition requests
 
 A skeleton model of the client code is available in the python module "irclient.py"
