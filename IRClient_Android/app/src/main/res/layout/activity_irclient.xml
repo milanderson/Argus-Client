@@ -6,12 +6,20 @@
     android:layout_height="match_parent"
     tools:context="sbu.IRClient.IRClient">
 
+    <ProgressBar
+        android:id="@+id/loadingWheel"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:indeterminate="true"
+        android:visibility="invisible"
+        android:theme="@style/ProgressBar"
+        android:elevation="4dp"/>
+
     <sbu.IRClient.IRView
         android:id="@+id/overlayView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:elevation="1dp" />
-
     <TextureView
         android:id="@+id/textureView"
         android:layout_width="wrap_content"
@@ -141,11 +149,26 @@
         </TableRow>
         <TableRow
             android:layout_marginTop="20dp">
-            <CheckBox
-                android:id="@+id/LatencyCorrectionCheckBox"
-                android:layout_width="wrap_content"
-                android:text="Drop Slow Responses"
-                android:textSize="16dp"/>
+            <TableLayout
+                xmlns:android="http://schemas.android.com/apk/res/android"
+                xmlns:tools="http://schemas.android.com/tools"
+                android:layout_width="fill_parent"
+                android:layout_height="fill_parent"
+                android:shrinkColumns="*">
+                <TableRow>
+                    <CheckBox
+                        android:id="@+id/LatencyCorrectionCheckBox"
+                        android:layout_width="wrap_content"
+                        android:text="Drop Slow Responses"
+                        android:textSize="16dp"/>
+                    <Spinner
+                        android:layout_marginLeft="20dp"
+                        android:id="@+id/LatencyCorrectionDropDown"
+                        android:layout_width="70dp"
+                        android:layout_height="wrap_content"
+                        android:background="#FFF4F4F4"/>
+                </TableRow>
+            </TableLayout>
         </TableRow>
         <TableRow
             android:layout_marginTop="20dp">

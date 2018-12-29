@@ -16,7 +16,6 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.ByteBuffer;
 
-
 public class Net_ClassRequester extends Thread {
     public static String SERVER_IP = "http://130.245.158.1:50505";
     public final int SERVER_PORT = 50505;
@@ -78,6 +77,7 @@ public class Net_ClassRequester extends Thread {
                     frame = IRClient.NetMonitor.getFrame();
                     netReply = IRClient.NetMonitor.getReply();
                     if (frame != null) {
+                        Log.d(IRClient.TAG, "Connecting to server");
                         String fullURL = SERVER_IP;
 
                         url = new URL(fullURL);

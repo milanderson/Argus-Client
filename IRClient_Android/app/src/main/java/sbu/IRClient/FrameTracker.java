@@ -7,7 +7,7 @@ public class FrameTracker {
     private long[] timeStamps = new long[256];
 
     public FrameTracker(){
-        frame.fID = 0;
+        frame.fID = -1;
     }
 
     public Frame GetFrame(){
@@ -15,9 +15,9 @@ public class FrameTracker {
     }
 
     public void SetFrame(byte[] bytes){
+        frame.fID = (frame.fID + 1)%256;
         frame.bytes = bytes;
         timeStamps[frame.fID] = System.currentTimeMillis();
-        frame.fID = (frame.fID + 1)%256;
     }
 
     public long GetTimeStamp(int i){

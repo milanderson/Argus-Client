@@ -223,11 +223,15 @@ public class IRView extends View {
                 } else {
                     break;
                 }
-                int maskScale = (int)Math.sqrt((double)rawMask.length()/(320*240));
+                double maskScale = Math.sqrt((double)rawMask.length()/(320*240));
                 if (i == rawMask.length() - 1) {
-                    Bitmap sidewaysMap = Bitmap.createBitmap(colors, maskScale*320, maskScale*240, Bitmap.Config.ARGB_8888);
-                    bitmapMasks.add(Bitmap.createBitmap(sidewaysMap, 0, 0, sidewaysMap.getWidth(), sidewaysMap.getHeight(), rotMatrix, true));
-                    color++;
+                    try {
+                        Bitmap sidewaysMap = Bitmap.createBitmap(colors, (int)(maskScale * 320), (int)(maskScale * 240), Bitmap.Config.ARGB_8888);
+                        bitmapMasks.add(Bitmap.createBitmap(sidewaysMap, 0, 0, sidewaysMap.getWidth(), sidewaysMap.getHeight(), rotMatrix, true));
+                        color++;
+                    } catch (Exception e){
+                        Log.d(IRClient.TAG, "Error creating Bitmap from mask: " + e.toString());
+                    }
                 }
             }
         }

@@ -119,6 +119,7 @@ public class Net_RespReader extends Thread {
 
                                     //if message is complete convert to string and shift original buffer
                                     if (lineEnd > 0) {
+                                        //Log.d(IRClient.TAG, "JSONifying " + recvString.substring(lineSt - 1, lineEnd + 1));
                                         recvJSONs = new JSONArray(recvString.substring(lineSt - 1, lineEnd + 1));
                                         //Log.d(IRClient.TAG, "JSONarray len: " + Integer.toString(recvJSONs.length()));
                                         recvFrameID = new String(recvBuf, 0,  4);
@@ -145,9 +146,9 @@ public class Net_RespReader extends Thread {
                     fID = Integer.parseInt(recvFrameID);
                     latency = recvTime - IRClient.NetMonitor.getFrameTimeStamp(fID);
 
-                    Log.e(IRClient.TAG, "FrameID: " + recvFrameID);
+                    Log.e(IRClient.TAG, "FrameID: " + recvFrameID + " latency: " + Long.toString(IRClient.NetMonitor.getFrameTimeStamp(fID)));
                     Log.e(IRClient.TAG, "Timestamp: " + Long.toString(IRClient.NetMonitor.getFrameTimeStamp(fID)) + " Latency: " + Long.toString(latency));
-                    if(latency > 0 && latency < 10000) {
+                    if(latency > 0 && latency < 30000) {
                         IRClient.mainHandler.post(update_latency);
                     }
 
@@ -159,14 +160,21 @@ public class Net_RespReader extends Thread {
                         //IRClient.mainHandler.post(update_guesses);
 
                         // Use for receiving a plain text, comma separated list of bounding rectangles coordinates
-                        //Log.d(IRClient.TAG, "adding to reactlist");
-                        rectList = recvJSON.getString("bounding_box").substring(1, recvJSON.getString("bounding_box").length() - 1) + ",";
-                        rectList += recvJSON.getString("class") + " " + recvJSON.getString("confidence").substring(0,4) + ",";
-                        IRClient.NetMonitor.addRectList(rectList);
+                        //Log.d(IRClient.TAG, "adding to rectlist");
+                        try {
+                            rectList = "";
+                            rectList = recvJSON.getString("bounding_box").substring(1, recvJSON.getString("bounding_box").length() - 1) + ",";
+                            rectList += recvJSON.getString("class") + " " + recvJSON.getString("confidence").substring(0, 4) + ",";
+                        } catch (Exception e) {}
+                        if(rectList != null && rectList.length() > 0) {
+                            IRClient.NetMonitor.addRectList(rectList);
+                        }
 
                         // use for receiving a plain text, run length encoded NxN bitmask flagging pixels covering the object
-                        //Log.d(IRClient.TAG, "adding to bitmask");
-                        IRClient.NetMonitor.addMask(recvJSON.getString("bit_mask"));
+                        try {
+                            Log.d(IRClient.TAG, "adding bitmask: " + recvJSON.getString("bit_mask"));
+                            IRClient.NetMonitor.addMask(recvJSON.getString("bit_mask"));
+                        } catch (Exception e) {}
                     }
                     Log.d(IRClient.TAG, "Updating rects" + rectList);
                     IRClient.mainHandler.post(update_rects);

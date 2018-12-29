@@ -12,6 +12,7 @@ import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.os.AsyncTask;
 import android.os.Handler;
+import android.os.PowerManager;
 import android.support.constraint.ConstraintLayout;
 import android.support.v4.app.ActivityCompat;
 import android.os.Bundle;
@@ -24,11 +25,15 @@ import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
+import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -56,10 +61,12 @@ public class IRClient extends Activity {
     public static IRView overlayView;
     private static SurfaceView backView;
     private TextureView texView;
+    private static ProgressBar loadingWheel;
     private static EditText IPInput;
     private static TextView IPText;
     public static Button TLbutton, TRbutton, BRbutton, BLbutton, STbutton, OPbutton, IPbutton;
     private static CheckBox latencyCheckBox, latencyCorrectionCheckBox;
+    private static Spinner latencyDropDown;
     public static TextView latencyView;
     public static ClassInputBar classInputBar;
     private static Toast toast;
@@ -67,8 +74,11 @@ public class IRClient extends Activity {
     private static SurfaceTexture camSurface;
     public static Context context;
 
+    protected static PowerManager.WakeLock wakeLock;
+
     private static boolean showLatency = false;
     private static boolean dropSlowPackets = false;
+    private static double packetTimeout = 0.5;
 
     private static IRClient runningClient;
 
@@ -109,6 +119,10 @@ public class IRClient extends Activity {
         Log.d(TAG, "Starting");
 
         checkPermissions();
+
+        // init power manager
+        final PowerManager pm = (PowerManager)getSystemService(Context.POWER_SERVICE);
+        this.wakeLock = pm.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK, TAG);
 
         initViews();
         initButtons();
@@ -185,11 +199,15 @@ public class IRClient extends Activity {
         backView = findViewById(R.id.backView);
         latencyView = findViewById(R.id.LatencyView);
         overlayView.labelView = findViewById(R.id.labelView);
+        loadingWheel = findViewById(R.id.loadingWheel);
 
         DisplayMetrics metrics = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getMetrics(metrics);
-        Log.d(TAG, Float.toString((float)metrics.heightPixels/(float)metrics.widthPixels
-        ));
+        Log.d(TAG, Float.toString((float)metrics.heightPixels/(float)metrics.widthPixels));
+
+        loadingWheel.setTranslationX((metrics.widthPixels/2) - 100);
+        loadingWheel.setTranslationY((metrics.heightPixels/2) - 100);
+
         if((float)metrics.heightPixels/(float)metrics.widthPixels > 640.0/480.0){
             texView.setLayoutParams(new ConstraintLayout.LayoutParams(ViewGroup.LayoutParams.FILL_PARENT, (int)(640.0*((float)metrics.widthPixels/(float)480))));
             overlayView.setLayoutParams(new ConstraintLayout.LayoutParams(ViewGroup.LayoutParams.FILL_PARENT, (int)(640.0*((float)metrics.widthPixels/(float)480))));
@@ -252,6 +270,34 @@ public class IRClient extends Activity {
             BLbutton = findViewById(R.id.buttonBL);
             BRbutton = findViewById(R.id.buttonBR);
 
+            latencyDropDown = findViewById(R.id.LatencyCorrectionDropDown);
+
+            String[] LatencyOptions = new String[]{"0.5s", "1.5s","3s","5s"};
+            ArrayAdapter<String> adapter = new ArrayAdapter<>(this, R.layout.support_simple_spinner_dropdown_item, LatencyOptions);
+            latencyDropDown.setAdapter(adapter);
+
+            latencyDropDown.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override
+                public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                    String item = parent.getItemAtPosition(position).toString();
+                    Log.d(IRClient.TAG, "Latency set to: " + item);
+                    if(item == "0.5s"){
+                        packetTimeout = 0.5;
+                    } else if(item == "1.5s"){
+                        packetTimeout = 1.5;
+                    }else if (item == "3s"){
+                        packetTimeout = 3.0;
+                    } else {
+                        packetTimeout = 5.0;
+                    }
+                }
+
+                @Override
+                public void onNothingSelected(AdapterView<?> parent) {
+
+                }
+            });
+
             latencyCheckBox = findViewById(R.id.LatencyCheckBox);
             latencyCheckBox.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
                 @Override
@@ -268,7 +314,7 @@ public class IRClient extends Activity {
                     Log.e(TAG, "drop slow responses: " + Boolean.toString(isChecked));
                     dropSlowPackets = isChecked;
 
-                    if(dropSlowPackets) {
+                    if(dropSlowPackets && IRClient.getState() == State.CLASSIFY) {
                         final Handler handler = new Handler();
                         final int delay = 500; //milliseconds
 
@@ -278,8 +324,13 @@ public class IRClient extends Activity {
                                 try{
                                     x = Integer.parseInt(latencyView.getText().toString());
                                 } catch (Exception e) {}
-                                if (x > 2500){
-                                    overlayView.clear();
+                                if (x > packetTimeout){
+                                    NetMonitor.clearRects();
+                                    NetMonitor.clearMasks();
+                                    overlayView.setRectList(NetMonitor.openRects());
+                                    NetMonitor.closeRects();
+                                    overlayView.addBitmapMasks(NetMonitor.openMasks());
+                                    NetMonitor.closeMasks();
                                 }
 
                                 if (dropSlowPackets) {
@@ -526,15 +577,42 @@ public class IRClient extends Activity {
         private static ArrayList<String> rawMasks = new ArrayList<String>();
         private static ArrayList<String> rectLists = new ArrayList<>();
         private static long frameUpdateInterval = 0;
+        private static long lastConnAttempt = 0;
+        private static long CONNWAITTIME = 1500;
 
         public static void startRequestThread(){
             classRequester = new Net_ClassRequester();
             classRequester.start();
+
+            lastConnAttempt = System.currentTimeMillis();
+            set_loadingwheel();
         }
 
         public static void startResponseThread(){
             respReader = new Net_RespReader();
             respReader.start();
+        }
+
+        public static void set_loadingwheel(){
+            final Handler handler = new Handler();
+
+            handler.postDelayed(new Runnable() {
+                public void run() {
+
+                    if(IRClient.getState() == State.CLASSIFY &&
+                            lastConnAttempt != 0 &&
+                            System.currentTimeMillis() - lastConnAttempt > CONNWAITTIME){
+                        loadingWheel.setVisibility(View.VISIBLE);
+                    } else {
+                        loadingWheel.setVisibility(View.INVISIBLE);
+                    }
+
+                    if (IRClient.getState() == State.CLASSIFY || IRClient.getState() == State.RESPOND) {
+                        handler.postDelayed(this, CONNWAITTIME);
+                    }
+
+                }
+            }, CONNWAITTIME);
         }
 
         public static void setNetStatusOK(){
@@ -597,6 +675,7 @@ public class IRClient extends Activity {
             if(respConn != null){
                 //respConn.disconnect();
             }
+            lastConnAttempt = 0;
             respConn = conn;
             reqToReadLock.unlock();
 
@@ -679,7 +758,7 @@ public class IRClient extends Activity {
         public static void addFrame ( byte[] frame){
 
             if(getState() == State.CLASSIFY || getState() == State.RESPOND) {
-                if(System.currentTimeMillis() - frameUpdateInterval > 5000) {
+                if(System.currentTimeMillis() - frameUpdateInterval > CONNWAITTIME) {
                     frontToBackLock.lock();
                     frameTracker.SetFrame(frame);
                     frameReady = true;
@@ -699,6 +778,7 @@ public class IRClient extends Activity {
             if(frameReady) {
                 retFrame = frameTracker.GetFrame();
                 frameReady = false;
+                lastConnAttempt = System.currentTimeMillis();
             }
             frontToBackLock.unlock();
             return retFrame;
@@ -775,8 +855,13 @@ public class IRClient extends Activity {
                     try {
                         x = Integer.parseInt(latencyView.getText().toString());
                     } catch (Exception e){}
-                    if (x > 2500){
-                        overlayView.clear();
+                    if (x > packetTimeout){
+                        NetMonitor.clearRects();
+                        NetMonitor.clearMasks();
+                        overlayView.setRectList(NetMonitor.openRects());
+                        NetMonitor.closeRects();
+                        overlayView.addBitmapMasks(NetMonitor.openMasks());
+                        NetMonitor.closeMasks();
                     }
 
                     if (dropSlowPackets) {
@@ -843,9 +928,24 @@ public class IRClient extends Activity {
             BLbutton.setVisibility(View.INVISIBLE);
             BLbutton.setText("");
             classInputBar.setVisibility(View.INVISIBLE);
+            loadingWheel.setVisibility(View.INVISIBLE);
+
+            NetMonitor.clearRects();
+            NetMonitor.clearMasks();
+            overlayView.setRectList(NetMonitor.openRects());
+            NetMonitor.closeRects();
+            overlayView.addBitmapMasks(NetMonitor.openMasks());
+            NetMonitor.closeMasks();
+
+            if(wakeLock.isHeld()){
+                wakeLock.release();
+            }
         }
 
         if(state == State.CLASSIFY){
+            if(!wakeLock.isHeld()){
+                wakeLock.acquire();
+            }
             if(getState() != State.CLASSIFY && getState() != State.RESPOND) {
                 Log.d(TAG, "init Cam");
                 runningClient.initCam();
@@ -893,6 +993,7 @@ public class IRClient extends Activity {
             Log.d(TAG, "Waiting for response");
             overlayView.hideGuesses();
             overlayView.refresh();
+            loadingWheel.setVisibility(View.INVISIBLE);
             cam.stopPreview();
 
             Log.d(TAG, "moving on");

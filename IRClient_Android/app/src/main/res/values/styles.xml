@@ -9,5 +9,8 @@
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
     </style>
+    <style name="ProgressBar" parent="ThemeOverlay.AppCompat.Light">
+        <item name="colorAccent">#90A0A0FF</item>
+    </style>
 
 </resources>
